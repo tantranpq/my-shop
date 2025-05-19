@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import React, { useState, useEffect } from 'react';
 import { Product } from "@/types/product";
+import Image from 'next/image'; // Import the Image component
 
 interface ProductDetailPageProps {
     params: { slug: string };
@@ -43,8 +44,12 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
 
                 setProduct(data);
                 setLoading(false);
-            } catch (err: any) {
-                setError(err.message || "Có lỗi xảy ra.");
+            } catch (err: unknown) {
+                let errorMessage = "Có lỗi xảy ra.";
+                if (err instanceof Error) {
+                    errorMessage = err.message;
+                }
+                setError(errorMessage);
                 setLoading(false);
             }
         };
@@ -95,7 +100,14 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
         <>
             <Navbar />
             <main className="p-6">
-                <img src={product.image} alt={product.name} className="w-80 h-80 rounded-lg mb-4" />
+                <Image // Use the Image component
+                    src={product.image}
+                    alt={product.name}
+                    width={320}  // Set the desired width (original: 80 * 4)
+                    height={320} // Set the desired height (original: 80 * 4)
+                    className="rounded-lg mb-4"
+                    priority // You can use the priority prop if this image is important for initial page load.  Use it sparingly.
+                />
                 <h1 className="text-2xl font-bold">{product.name}</h1>
                 <p className="text-lg text-gray-600">{product.price} vnđ</p>
                 <button

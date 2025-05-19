@@ -23,21 +23,25 @@ export default function ProductsPage() {
     const [products, setProducts] = React.useState<Product[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<Error | null>(null);
-
-    React.useEffect(() => {
-        async function fetchProducts() {
-            try {
-                const data = await getProducts();
-                setProducts(data);
-                setLoading(false);
-            } catch (err: any) {
-                setError(err);
-                setLoading(false);
+React.useEffect(() => {
+    async function fetchProducts() {
+        try {
+            const data = await getProducts();
+            setProducts(data);
+            setLoading(false);
+        } catch (err: unknown) {
+            let errorMessage = "Failed to fetch products.";
+            if (err instanceof Error) {
+                errorMessage = err.message;
             }
+            setError(new Error(errorMessage)); // Wrap errorMessage in new Error()
+            setLoading(false);
         }
+    }
 
-        fetchProducts();
-    }, []);
+    fetchProducts();
+}, []);
+
 
     const handleAddToCart = (product: Product) => {
         addToCart(product);

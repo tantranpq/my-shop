@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Product } from "@/types/product";
 import React from "react";
+import Image from 'next/image'; // Import Next.js Image
 
 type Props = {
     products: Product[];
@@ -16,7 +17,14 @@ export default function ProductsList({ products, onAddToCart }: Props) {
                 <div key={product.id} className="border rounded-lg overflow-hidden shadow hover:shadow-lg transition">
                     <div className="relative">
                         <Link href={`/products/${product.slug}`}>
-                            <img src={product.image} alt={product.name} className="w-full h-60 object-cover cursor-pointer" />
+                            <Image
+                                src={product.image}
+                                alt={product.name}
+                                width={300}  // Example: Adjust as needed
+                                height={200} // Example: Adjust as needed
+                                className="w-full h-60 object-cover cursor-pointer"
+                                style={{objectFit: 'cover'}}
+                            />
                         </Link>
                         <button className="absolute top-2 right-2 bg-white bg-opacity-75 rounded-full p-1 hover:bg-opacity-100">
                             <svg className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">

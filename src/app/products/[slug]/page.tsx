@@ -9,11 +9,8 @@ import React, { useState, useEffect } from 'react';
 import { Product } from "@/types/product";
 import Image from 'next/image';
 
-interface ProductDetailPageProps {
-    params: { slug: string };
-}
-
-export default function ProductDetail({ params }: ProductDetailPageProps) { // Keep the defined props
+// Loại bỏ interface tùy chỉnh
+export default function ProductDetail({ params }: { params: { slug: string } }) {
     const { slug } = params;
     const { addToCart } = useCart();
     const [product, setProduct] = useState<Product | null>(null);
@@ -31,13 +28,13 @@ export default function ProductDetail({ params }: ProductDetailPageProps) { // K
                     .single();
 
                 if (fetchError) {
-                    setError("Failed to fetch product.");
+                    setError("Không thể tải sản phẩm.");
                     setLoading(false);
                     return;
                 }
 
                 if (!data) {
-                    setError("Product not found.");
+                    setError("Không tìm thấy sản phẩm.");
                     setLoading(false);
                     return;
                 }
@@ -45,7 +42,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) { // K
                 setProduct(data);
                 setLoading(false);
             } catch (err: unknown) {
-                let errorMessage = "An unexpected error occurred.";
+                let errorMessage = "Có lỗi xảy ra.";
                 if (err instanceof Error) {
                     errorMessage = err.message;
                 }
@@ -62,7 +59,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) { // K
             <>
                 <Navbar />
                 <main className="p-6">
-                    <p>Loading product details...</p>
+                    <p>Đang tải chi tiết sản phẩm...</p>
                 </main>
             </>
         );
@@ -87,7 +84,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) { // K
             <>
                 <Navbar />
                 <main className="p-6">
-                    <p>Product not found.</p>
+                    <p>Không tìm thấy sản phẩm.</p>
                     <Link href="/products" className="text-blue-500 mt-4 block hover:underline">
                         ← Quay lại danh sách
                     </Link>

@@ -7,13 +7,13 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import React, { useState, useEffect } from 'react';
 import { Product } from "@/types/product";
-import Image from 'next/image'; // Import the Image component
+import Image from 'next/image';
 
 interface ProductDetailPageProps {
     params: { slug: string };
 }
 
-export default function ProductDetail({ params }: ProductDetailPageProps) {
+export default function ProductDetail({ params }: ProductDetailPageProps) { // Keep the defined props
     const { slug } = params;
     const { addToCart } = useCart();
     const [product, setProduct] = useState<Product | null>(null);
@@ -31,13 +31,13 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
                     .single();
 
                 if (fetchError) {
-                    setError("Không thể tải sản phẩm.");
+                    setError("Failed to fetch product.");
                     setLoading(false);
                     return;
                 }
 
                 if (!data) {
-                    setError("Không tìm thấy sản phẩm.");
+                    setError("Product not found.");
                     setLoading(false);
                     return;
                 }
@@ -45,7 +45,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
                 setProduct(data);
                 setLoading(false);
             } catch (err: unknown) {
-                let errorMessage = "Có lỗi xảy ra.";
+                let errorMessage = "An unexpected error occurred.";
                 if (err instanceof Error) {
                     errorMessage = err.message;
                 }
@@ -62,7 +62,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
             <>
                 <Navbar />
                 <main className="p-6">
-                    <p>Đang tải chi tiết sản phẩm...</p>
+                    <p>Loading product details...</p>
                 </main>
             </>
         );
@@ -87,7 +87,7 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
             <>
                 <Navbar />
                 <main className="p-6">
-                    <p>Không tìm thấy sản phẩm.</p>
+                    <p>Product not found.</p>
                     <Link href="/products" className="text-blue-500 mt-4 block hover:underline">
                         ← Quay lại danh sách
                     </Link>
@@ -100,13 +100,13 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
         <>
             <Navbar />
             <main className="p-6">
-                <Image // Use the Image component
+                <Image
                     src={product.image}
                     alt={product.name}
-                    width={320}  // Set the desired width (original: 80 * 4)
-                    height={320} // Set the desired height (original: 80 * 4)
+                    width={320}
+                    height={320}
                     className="rounded-lg mb-4"
-                    priority // You can use the priority prop if this image is important for initial page load.  Use it sparingly.
+                    priority
                 />
                 <h1 className="text-2xl font-bold">{product.name}</h1>
                 <p className="text-lg text-gray-600">{product.price} vnđ</p>
@@ -125,3 +125,4 @@ export default function ProductDetail({ params }: ProductDetailPageProps) {
         </>
     );
 }
+

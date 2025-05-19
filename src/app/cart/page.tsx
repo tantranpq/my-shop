@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-
+import Image from 'next/image';
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 
@@ -18,14 +18,23 @@ export default function CartPage() {
       ) : (
         <div>
           {cart.map((item) => (
-            <div key={item.slug} className="border-b py-2 flex justify-between">
-              <div>
-                <p>{item.name} × {item.quantity}</p>
-                <p className="text-gray-600">{item.price} đ</p>
+            <div key={item.slug} className="border-b py-2 flex justify-between items-center">
+              <div className="w-20 h-20 rounded overflow-hidden relative"> {/* Thêm relative để container của Image hoạt động với layout="fill" */}
+                <Image
+                  src={item.image}
+                  alt={item.name}
+                  layout="fill"
+                  objectFit="cover"
+                  className="rounded" // Có thể áp dụng thêm class rounded nếu muốn
+                />
+              </div>
+              <div className="flex-grow">
+                <p className="font-semibold">{item.name} × {item.quantity}</p>
+                <p className="text-gray-600 text-sm">{item.price} đ</p>
               </div>
               <button
                 onClick={() => removeFromCart(item.slug)}
-                className="text-red-500"
+                className="text-red-500 hover:bg-red-100 rounded-md px-2 py-1 transition duration-150 ease-in-out"
               >
                 Xóa
               </button>

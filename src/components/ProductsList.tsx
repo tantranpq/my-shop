@@ -20,8 +20,8 @@ export default function ProductsList({ products, onAddToCart }: Props) {
                             <Image
                                 src={product.image}
                                 alt={product.name}
-                                width={300}  // Example: Adjust as needed
-                                height={200} // Example: Adjust as needed
+                                width={300}  
+                                height={200} 
                                 className="w-full h-60 object-cover cursor-pointer"
                                 style={{objectFit: 'cover'}}
                             />

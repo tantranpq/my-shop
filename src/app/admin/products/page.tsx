@@ -449,7 +449,7 @@ export default function AdminProductsPage() {
             {products && products.length === 0 && !debouncedSearchQuery ? (
                 <p className="text-center text-gray-600 text-lg">Chưa có sản phẩm nào.</p>
             ) : products && products.length === 0 && debouncedSearchQuery ? (
-                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với '{debouncedSearchQuery}'</p>
+                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với: <strong>{debouncedSearchQuery}</strong></p>
             ) : (
                 <div className="overflow-x-auto bg-white shadow-md rounded-lg">
                     <table className="min-w-full divide-y divide-gray-200">

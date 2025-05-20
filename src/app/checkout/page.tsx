@@ -1,10 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
-// import CheckoutSearchParamsHandler from '@/components/CheckoutSearchParamsHandler';
 
 interface Profile {
   full_name: string | null;
@@ -17,21 +16,15 @@ export default function CheckoutPage() {
   const user = useUser();
   const router = useRouter();
   const { cart, clearCart } = useCart();
-  // const searchParams = useSearchParams();
-  const [selectedItemSlugs] = useState<string[] | null>(null);
-  const selectedCartItems = selectedItemSlugs
-    ? cart.filter((item) => selectedItemSlugs.includes(item.slug))
-    : [];
+  const searchParams = useSearchParams();
+  const selectedItemSlugs = searchParams.get('items')?.split(',') || [];
+  const selectedCartItems = cart.filter((item) => selectedItemSlugs.includes(item.slug));
   const [profile, setProfile] = useState<Profile>({ full_name: null, phone: null, address: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
-
-  // const handleSearchParams = (items: string[] | null) => {
-  //   setSelectedItemSlugs(items);
-  // };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -54,6 +47,11 @@ export default function CheckoutPage() {
 
     fetchProfile();
   }, [user?.id, supabaseClient]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setProfile(prevProfile => ({ ...prevProfile, [name]: value }));
+  };
 
   const placeOrder = async () => {
     if (!user || selectedCartItems.length === 0) return;
@@ -124,7 +122,9 @@ export default function CheckoutPage() {
       }
 
       setOrderSuccess(true);
-      clearCart();
+      // Lọc ra các sản phẩm đã đặt để xóa khỏi giỏ hàng (nếu cần)
+      // const remainingCart = cart.filter(item => !selectedItemSlugs.includes(item.slug));
+      clearCart(); // Hoặc bạn có thể cập nhật giỏ hàng chỉ xóa các sản phẩm đã mua
       router.push(`/order-success/${orderId}`);
       console.log('Đơn hàng đã được lưu thành công với ID:', orderId);
 
@@ -175,7 +175,7 @@ export default function CheckoutPage() {
               type="text"
               name="full_name"
               value={profile.full_name || ''}
-              onChange={(e) => setProfile(prev => ({ ...prev, full_name: e.target.value }))}
+              onChange={handleInputChange}
               required
             />
           </div>
@@ -189,7 +189,7 @@ export default function CheckoutPage() {
               type="text"
               name="phone"
               value={profile.phone || ''}
-              onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
+              onChange={handleInputChange}
               required
             />
           </div>
@@ -202,7 +202,7 @@ export default function CheckoutPage() {
               id="address"
               name="address"
               value={profile.address || ''}
-              onChange={(e) => setProfile(prev => ({ ...prev, address: e.target.value }))}
+              onChange={handleInputChange}
               required
             />
           </div>

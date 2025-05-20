@@ -1,5 +1,4 @@
 "use client";
-export const dynamic = "force-dynamic";
 
 import '@/app/globals.css';
 import Navbar from "@/components/Navbar";

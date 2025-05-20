@@ -1,5 +1,5 @@
 "use client";
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import Link from 'next/link';
@@ -27,7 +27,6 @@ interface OrderItem {
 
 export default function OrderSuccessPage() {
   const { id } = useParams();
-  const router = useRouter();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
   const [order, setOrder] = useState<Order | null>(null);

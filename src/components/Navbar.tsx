@@ -26,14 +26,14 @@ const Navbar = () => {
     router.push('/login');
   };
 
-  const handleDesktopLoginClick = () => {
-    router.push(`/login?redirectTo=${pathname}`);
-  };
+  // const handleDesktopLoginClick = () => {
+  //   router.push(`/login?redirectTo=${pathname}`);
+  // };
 
-  const handleMobileLoginClick = () => {
-    setIsOpen(false);
-    router.push(`/login?redirectTo=${pathname}`);
-  };
+  // const handleMobileLoginClick = () => {
+  //   setIsOpen(false);
+  //   router.push(`/login?redirectTo=${pathname}`);
+  // };
 
   const toggleMobileSearch = () => {
     setIsMobileSearchOpen(!isMobileSearchOpen);

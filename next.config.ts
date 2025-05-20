@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
         pathname: '/w1920/Uploaded/**',
       },
     ],
+    domains: ['ivbdbwtacfchvldxvzfq.supabase.co'],
   },
   serverComponentsExternalPackages: ['@supabase/supabase-js'],
   appDir: true,

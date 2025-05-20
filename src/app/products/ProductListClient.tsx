@@ -65,8 +65,8 @@ export default function ProductPageClient() {
       ) : (
         searchTerm && (
           <p>
-            Không tìm thấy sản phẩm nào phù hợp với từ khóa "
-            {searchTerm}"
+            Không tìm thấy sản phẩm nào phù hợp với từ khóa 
+            '{searchTerm}'
           </p>
         )
       )}

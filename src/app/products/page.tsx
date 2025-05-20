@@ -68,13 +68,12 @@ export default function ProductsPage() {
             <Navbar />
             <main className="max-w-6xl mx-auto p-6">
                 <h1 className="text-2xl font-bold mb-6">
-                    {searchTerm ? `Kết quả tìm kiếm cho '${searchTerm}'` : 'Sản phẩm'}
+                    {searchTerm ? `Kết quả tìm kiếm cho &quot;${searchTerm}&quot;` : 'Sản phẩm'}
                 </h1>
                 {products && products.length > 0 ? (
                     <ProductList products={products} onAddToCart={handleAddToCart} />
                 ) : (
-                    searchTerm && <p>Không tìm thấy sản phẩm nào phù hợp với từ khóa '{searchTerm}'.</p>
-                )}
+                    searchTerm && <p>Không tìm thấy sản phẩm nào phù hợp với từ khóa &quot;{searchTerm}&quot;.</p>)}
             </main>
         </>
     );

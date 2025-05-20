@@ -13,9 +13,9 @@ const CheckoutSearchParamsHandler: React.FC<CheckoutSearchParamsHandlerProps> = 
 
   useEffect(() => {
     onSearchParams(selectedItemSlugs);
-  }, [searchParams, onSearchParams]);
+  }, [searchParams, onSearchParams, selectedItemSlugs]);
 
-  return null; // Component này không render UI trực tiếp
+  return null;
 };
 
 export default CheckoutSearchParamsHandler;

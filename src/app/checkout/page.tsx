@@ -4,7 +4,7 @@ import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
-import CheckoutSearchParamsHandler from '@/components/CheckoutSearchParamsHandler';
+// import CheckoutSearchParamsHandler from '@/components/CheckoutSearchParamsHandler';
 
 interface Profile {
   full_name: string | null;
@@ -17,7 +17,7 @@ export default function CheckoutPage() {
   const user = useUser();
   const router = useRouter();
   const { cart, clearCart } = useCart();
-  const searchParams = useSearchParams();
+  // const searchParams = useSearchParams();
   const [selectedItemSlugs, setSelectedItemSlugs] = useState<string[] | null>(null);
   const selectedCartItems = selectedItemSlugs
     ? cart.filter((item) => selectedItemSlugs.includes(item.slug))
@@ -29,9 +29,9 @@ export default function CheckoutPage() {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
-  const handleSearchParams = (items: string[] | null) => {
-    setSelectedItemSlugs(items);
-  };
+  // const handleSearchParams = (items: string[] | null) => {
+  //   setSelectedItemSlugs(items);
+  // };
 
   useEffect(() => {
     const fetchProfile = async () => {

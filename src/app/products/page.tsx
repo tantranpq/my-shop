@@ -36,7 +36,7 @@ export default function ProductsPage() {
         const data = await getProducts(searchTerm);
         setProducts(data);
         setError(null);
-      } catch (e) {
+      } catch {
         setError("Failed to fetch products");
       }
       setLoading(false);

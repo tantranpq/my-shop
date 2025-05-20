@@ -115,12 +115,16 @@ export default function CheckoutPage() {
 
       clearCart();
       router.push(`/order-success/${orderId}`);
-    } catch (err: any) {
-      console.error(err);
-      setOrderError(err.message || 'Đã có lỗi xảy ra.');
-    } finally {
-      setIsPlacingOrder(false);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error(err);
+        setOrderError(err.message || 'Đã có lỗi xảy ra.');
+      } else {
+        console.error('Unknown error:', err);
+        setOrderError('Đã có lỗi xảy ra.');
+      }
     }
+
   };
 
   if (!user) {
@@ -185,11 +189,10 @@ export default function CheckoutPage() {
           <button
             onClick={placeOrder}
             disabled={isPlacingOrder || selectedCartItems.length === 0}
-            className={`w-full py-2 text-white font-semibold rounded ${
-              isPlacingOrder || selectedCartItems.length === 0
+            className={`w-full py-2 text-white font-semibold rounded ${isPlacingOrder || selectedCartItems.length === 0
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+              }`}
           >
             {isPlacingOrder ? 'Đang xử lý...' : 'Xác nhận đặt hàng'}
           </button>

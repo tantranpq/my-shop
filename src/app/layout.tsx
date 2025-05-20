@@ -1,24 +1,26 @@
 // app/layout.tsx
-"use client";
 import "./globals.css";
 import { CartProvider } from "../context/CartContext";
 import { supabase } from "../lib/supabase";
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
-import { useState } from 'react';
-import Notification from '../app/notification'; 
+import Notification from '../app/notification';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'My Store',
+  description: 'A sample Next.js store',
+};
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [supabaseClient] = useState(() => supabase);
-
   return (
     <html lang="en">
       <body>
         <SessionContextProvider
-          supabaseClient={supabaseClient}
+          supabaseClient={supabase} // Khởi tạo trực tiếp
           initialSession={undefined}
         >
           <CartProvider>

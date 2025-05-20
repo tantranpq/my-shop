@@ -1,8 +1,8 @@
 "use client";
 
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 
@@ -13,12 +13,13 @@ interface Profile {
 }
 
 export default function CheckoutClient() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { cart, clearCart } = useCart();
 
+  // Lấy selected items từ searchParams
   const selectedItemSlugs = searchParams.get('items')?.split(',') || [];
   const selectedCartItems = cart.filter((item) => selectedItemSlugs.includes(item.slug));
 
@@ -124,6 +125,8 @@ export default function CheckoutClient() {
         console.error('Unknown error:', err);
         setOrderError('Đã có lỗi xảy ra.');
       }
+    } finally {
+      setIsPlacingOrder(false);
     }
   };
 
@@ -189,11 +192,10 @@ export default function CheckoutClient() {
           <button
             onClick={placeOrder}
             disabled={isPlacingOrder || selectedCartItems.length === 0}
-            className={`w-full py-2 text-white font-semibold rounded ${
-              isPlacingOrder || selectedCartItems.length === 0
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+            className={`w-full py-2 text-white font-semibold rounded ${isPlacingOrder || selectedCartItems.length === 0
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700'
+              }`}
           >
             {isPlacingOrder ? 'Đang xử lý...' : 'Xác nhận đặt hàng'}
           </button>

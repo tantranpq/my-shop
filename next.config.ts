@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverComponentsExternalPackages: ['@supabase/supabase-js'],
+  appDir: true,
 };
 
 export default nextConfig;

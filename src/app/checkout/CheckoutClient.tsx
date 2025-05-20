@@ -9,6 +9,7 @@ export default function SimpleClient() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Test useSearchParams trong client component</h2>
+      <p>Giá trị của "foo" trong URL là: <strong>'{foo}'</strong></p>
       <p>Ví dụ thử truy cập: /checkout?foo=hello</p>
     </div>
   );

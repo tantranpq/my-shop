@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import '@/app/globals.css';
 import Navbar from "@/components/Navbar";
@@ -7,9 +8,14 @@ import ProductList from "@/components/ProductsList";
 import { supabase } from "@/lib/supabase";
 import { Product } from "@/types/product";
 import React from "react";
+import { useSearchParams } from 'next/navigation';
 
-async function getProducts(): Promise<Product[]> {
-    const { data: products, error } = await supabase.from("products").select("*");
+async function getProducts(searchTerm: string | null): Promise<Product[]> {
+    let query = supabase.from("products").select("*");
+    if (searchTerm) {
+        query = query.ilike('name', `%${searchTerm}%`); // Tìm kiếm gần đúng theo tên
+    }
+    const { data: products, error } = await query;
     if (error) {
         console.error("Lỗi khi tải sản phẩm:", error);
         return [];
@@ -19,6 +25,8 @@ async function getProducts(): Promise<Product[]> {
 
 export default function ProductsPage() {
     const { addToCart } = useCart();
+    const searchParams = useSearchParams();
+    const searchTerm = searchParams.get('search');
     const [products, setProducts] = React.useState<Product[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<Error | null>(null);
@@ -26,7 +34,7 @@ export default function ProductsPage() {
     React.useEffect(() => {
         async function fetchProducts() {
             try {
-                const data = await getProducts();
+                const data = await getProducts(searchTerm);
                 setProducts(data);
                 setLoading(false);
             } catch (err: unknown) {
@@ -40,7 +48,7 @@ export default function ProductsPage() {
         }
 
         fetchProducts();
-    }, []);
+    }, [searchTerm]);
 
     const handleAddToCart = (product: Product) => {
         addToCart(product);
@@ -59,12 +67,13 @@ export default function ProductsPage() {
         <>
             <Navbar />
             <main className="max-w-6xl mx-auto p-6">
-                <h1 className="text-2xl font-bold mb-6">Sản phẩm</h1>
+                <h1 className="text-2xl font-bold mb-6">
+                    {searchTerm ? `Kết quả tìm kiếm cho '${searchTerm}'` : 'Sản phẩm'}
+                </h1>
                 {products && products.length > 0 ? (
                     <ProductList products={products} onAddToCart={handleAddToCart} />
                 ) : (
-                    <p>Không có sản phẩm nào.</p>
-                )}
+                    searchTerm && <p>Không tìm thấy sản phẩm nào phù hợp với từ khóa &quot;{searchTerm}&quot;</p>)}
             </main>
         </>
     );

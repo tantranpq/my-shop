@@ -15,34 +15,37 @@ export default function CheckoutPage() {
   const supabaseClient = useSupabaseClient();
   const user = useUser();
   const router = useRouter();
-  const { cart, clearCart } = useCart();
   const searchParams = useSearchParams();
+  const { cart, clearCart } = useCart();
+
   const selectedItemSlugs = searchParams.get('items')?.split(',') || [];
   const selectedCartItems = cart.filter((item) => selectedItemSlugs.includes(item.slug));
-  const [profile, setProfile] = useState<Profile>({ full_name: null, phone: null, address: null });
+
+  const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', address: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (user?.id) {
-        setLoading(true);
-        const { data, error } = await supabaseClient
-          .from('profiles')
-          .select('full_name, phone, address')
-          .eq('id', user.id)
-          .single();
+      if (!user?.id) return;
 
-        if (error) {
-          setError(error.message);
-        } else if (data) {
-          setProfile(data);
-        }
-        setLoading(false);
+      setLoading(true);
+      const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('full_name, phone, address')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        setError('Không thể tải thông tin cá nhân.');
+        console.error(error.message);
+      } else if (data) {
+        setProfile(data);
       }
+
+      setLoading(false);
     };
 
     fetchProfile();
@@ -50,7 +53,7 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setProfile(prevProfile => ({ ...prevProfile, [name]: value }));
+    setProfile((prev) => ({ ...prev, [name]: value }));
   };
 
   const placeOrder = async () => {
@@ -58,22 +61,20 @@ export default function CheckoutPage() {
 
     setIsPlacingOrder(true);
     setOrderError(null);
-    setOrderSuccess(false);
 
     try {
-      const { error: profileUpdateError } = await supabaseClient
+      // Cập nhật thông tin người dùng
+      const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({ id: user.id, ...profile })
         .single();
 
-      if (profileUpdateError) {
-        console.error('Lỗi khi cập nhật profile:', profileUpdateError);
-        setOrderError('Đã có lỗi xảy ra khi cập nhật thông tin cá nhân. Vui lòng thử lại.');
-        setIsPlacingOrder(false);
-        return;
+      if (profileError) {
+        throw new Error('Lỗi khi cập nhật thông tin cá nhân.');
       }
 
-      const { data: orderData, error: createOrderError } = await supabaseClient
+      // Tạo đơn hàng
+      const { data: orderData, error: orderError } = await supabaseClient
         .from('orders')
         .insert([
           {
@@ -87,15 +88,14 @@ export default function CheckoutPage() {
         .select('id')
         .single();
 
-      if (createOrderError) {
-        console.error('Lỗi khi tạo đơn hàng:', createOrderError);
-        setOrderError('Đã có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại.');
-        setIsPlacingOrder(false);
-        return;
+      if (orderError || !orderData?.id) {
+        throw new Error('Không thể tạo đơn hàng.');
       }
 
       const orderId = orderData.id;
-      const orderItemsToInsert = selectedCartItems.map((item) => ({
+
+      // Tạo order_items
+      const items = selectedCartItems.map((item) => ({
         order_id: orderId,
         product_id: item.id,
         product_name: item.name,
@@ -103,120 +103,100 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       }));
 
-      const { error: createOrderItemsError } = await supabaseClient
+      const { error: itemsError } = await supabaseClient
         .from('order_items')
-        .insert(orderItemsToInsert);
+        .insert(items);
 
-      if (createOrderItemsError) {
-        console.error('Lỗi khi thêm sản phẩm vào đơn hàng:', createOrderItemsError);
-        const { error: deleteOrderError } = await supabaseClient
-          .from('orders')
-          .delete()
-          .eq('id', orderId);
-        if (deleteOrderError) {
-          console.error('Lỗi khi rollback đơn hàng:', deleteOrderError);
-        }
-        setOrderError('Đã có lỗi xảy ra khi thêm sản phẩm vào đơn hàng. Vui lòng thử lại.');
-        setIsPlacingOrder(false);
-        return;
+      if (itemsError) {
+        // Rollback nếu có lỗi khi insert order_items
+        await supabaseClient.from('orders').delete().eq('id', orderId);
+        throw new Error('Lỗi khi lưu sản phẩm. Đơn hàng đã bị hủy.');
       }
 
-      setOrderSuccess(true);
-      // Lọc ra các sản phẩm đã đặt để xóa khỏi giỏ hàng (nếu cần)
-      // const remainingCart = cart.filter(item => !selectedItemSlugs.includes(item.slug));
-      clearCart(); // Hoặc bạn có thể cập nhật giỏ hàng chỉ xóa các sản phẩm đã mua
+      clearCart();
       router.push(`/order-success/${orderId}`);
-      console.log('Đơn hàng đã được lưu thành công với ID:', orderId);
-
-    } catch (error) {
-      console.error('Lỗi không xác định:', error);
-      setOrderError('Đã có lỗi không xác định xảy ra. Vui lòng thử lại.');
+    } catch (err: any) {
+      console.error(err);
+      setOrderError(err.message || 'Đã có lỗi xảy ra.');
     } finally {
       setIsPlacingOrder(false);
     }
   };
 
-  if (loading) {
-    return <div>Đang tải thông tin...</div>;
-  }
-
   if (!user) {
-    return <div>Bạn cần phải đăng nhập để thanh toán. <Link href="/login">Đăng nhập</Link></div>;
+    return <div className="p-4">Bạn cần <Link className="text-blue-500 underline" href="/login">đăng nhập</Link> để tiếp tục.</div>;
   }
 
-  if (orderSuccess) {
-    return <div>Đặt hàng thành công! Mã đơn hàng của bạn là: ...</div>;
+  if (loading) {
+    return <div className="p-4">Đang tải thông tin...</div>;
   }
 
   return (
     <div className="flex justify-center items-center p-6 bg-gray-100">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Xác nhận thông tin giao hàng</h1>
-        {error && <p className="text-red-500 mb-4">{error}</p>}
-        {orderError && <p className="text-red-500 mb-4">{orderError}</p>}
+        <h1 className="text-2xl font-bold mb-6 text-center">Xác nhận đơn hàng</h1>
+        {error && <p className="text-red-500">{error}</p>}
+        {orderError && <p className="text-red-500">{orderError}</p>}
 
-        <h2 className="text-xl font-semibold mb-4">Sản phẩm bạn chọn</h2>
-        {selectedCartItems.map((item) => (
-          <div key={item.slug} className="mb-2">
-            {item.name} × {item.quantity} - {item.price} đ
-          </div>
-        ))}
-        {selectedCartItems.length > 0 && <hr className="mb-4" />}
-        {selectedCartItems.length === 0 && <p className="mb-4">Không có sản phẩm nào được chọn.</p>}
+        <h2 className="text-lg font-semibold mb-2">Sản phẩm đã chọn:</h2>
+        <ul className="mb-4 text-sm">
+          {selectedCartItems.map((item) => (
+            <li key={item.slug}>
+              {item.name} × {item.quantity} — {item.price.toLocaleString()} đ
+            </li>
+          ))}
+        </ul>
+
+        {selectedCartItems.length === 0 && (
+          <p className="text-red-500 mb-4">Không có sản phẩm nào được chọn.</p>
+        )}
 
         <form onSubmit={(e) => e.preventDefault()}>
           <div className="mb-4">
-            <label htmlFor="full_name" className="block text-gray-700 text-sm font-bold mb-2">
-              Họ và tên
-            </label>
+            <label className="block text-sm font-medium">Họ tên</label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
-              id="full_name"
-              type="text"
               name="full_name"
               value={profile.full_name || ''}
               onChange={handleInputChange}
               required
+              className="w-full border rounded px-3 py-2 mt-1"
             />
           </div>
           <div className="mb-4">
-            <label htmlFor="phone" className="block text-gray-700 text-sm font-bold mb-2">
-              Số điện thoại
-            </label>
+            <label className="block text-sm font-medium">Số điện thoại</label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
-              id="phone"
-              type="text"
               name="phone"
               value={profile.phone || ''}
               onChange={handleInputChange}
               required
+              className="w-full border rounded px-3 py-2 mt-1"
             />
           </div>
-          <div className="mb-6">
-            <label htmlFor="address" className="block text-gray-700 text-sm font-bold mb-2">
-              Địa chỉ giao hàng
-            </label>
+          <div className="mb-4">
+            <label className="block text-sm font-medium">Địa chỉ giao hàng</label>
             <textarea
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
-              id="address"
               name="address"
               value={profile.address || ''}
               onChange={handleInputChange}
               required
+              className="w-full border rounded px-3 py-2 mt-1"
             />
           </div>
           <button
-            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus-shadow-outline w-full ${isPlacingOrder || selectedCartItems.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
             onClick={placeOrder}
             disabled={isPlacingOrder || selectedCartItems.length === 0}
+            className={`w-full py-2 text-white font-semibold rounded ${
+              isPlacingOrder || selectedCartItems.length === 0
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
-            {isPlacingOrder ? 'Đang đặt hàng...' : 'Xác nhận đặt hàng'}
+            {isPlacingOrder ? 'Đang xử lý...' : 'Xác nhận đặt hàng'}
           </button>
         </form>
-        <p className="mt-4 text-sm text-center">
+        <div className="mt-4 text-center text-sm">
           <Link href="/cart" className="text-blue-500 hover:underline">← Quay lại giỏ hàng</Link>
-        </p>
+        </div>
       </div>
     </div>
   );

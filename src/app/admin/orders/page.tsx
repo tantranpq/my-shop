@@ -34,7 +34,6 @@ export default function AdminOrdersPage() {
   const { isLoading: isLoadingSession } = useSessionContext();
   const queryClient = useQueryClient();
 
-  const [error, setError] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
 
   const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
@@ -68,7 +67,6 @@ export default function AdminOrdersPage() {
     data: orders,
     isLoading: isLoadingOrders,
     error: ordersQueryError,
-    refetch: refetchOrders, // Vẫn giữ refetch để dùng thủ công nếu cần
   } = useQuery<Order[], Error>({
     queryKey: ['adminOrders'],
     queryFn: async () => {

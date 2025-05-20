@@ -6,6 +6,8 @@ import {
   useEffect,
   useState,
   ReactNode,
+  SetStateAction, // Import SetStateAction
+  Dispatch // Import Dispatch
 } from "react";
 
 type Product = {
@@ -25,8 +27,10 @@ type CartContextType = {
   clearCart: () => void;
   notification: string | null;
   setNotification: (message: string | null) => void;
-  incrementQuantity: (slug: string) => void; // Thêm hàm này
-  decrementQuantity: (slug: string) => void; // Thêm hàm này
+  incrementQuantity: (slug: string) => void;
+  decrementQuantity: (slug: string) => void;
+  // Thêm setCart vào CartContextType
+  setCart: Dispatch<SetStateAction<CartItem[]>>;
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -109,6 +113,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setNotification,
         incrementQuantity,
         decrementQuantity,
+        setCart, // Thêm setCart vào đây
       }}
     >
       {children}

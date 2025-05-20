@@ -12,22 +12,25 @@ interface Profile {
   address: string | null;
 }
 
+type PaymentMethod = 'cod' | 'online';
+
 export default function CheckoutClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
-  const { cart, clearCart } = useCart();
+  const { cart, setCart } = useCart();
 
-  // Lấy selected items từ searchParams
   const selectedItemSlugs = searchParams.get('items')?.split(',') || [];
   const selectedCartItems = cart.filter((item) => selectedItemSlugs.includes(item.slug));
+  const orderTotal = selectedCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0); // Tính tổng tiền
 
   const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', address: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -75,6 +78,18 @@ export default function CheckoutClient() {
         throw new Error('Lỗi khi cập nhật thông tin cá nhân.');
       }
 
+      let expiresAt: string | null = null;
+      let paymentStatus: string = 'pending'; // Mặc định là pending cho online, sẽ thay đổi cho COD
+
+      if (paymentMethod === 'online') {
+        const oneHourLater = new Date();
+        oneHourLater.setHours(oneHourLater.getHours() + 1);
+        expiresAt = oneHourLater.toISOString(); // Lưu dưới dạng ISO string
+        paymentStatus = 'pending_online'; // Trạng thái rõ ràng hơn cho online pending
+      } else if (paymentMethod === 'cod') {
+        paymentStatus = 'unconfirmed_cod'; // Trạng thái ban đầu cho COD
+      }
+
       // Tạo đơn hàng
       const { data: orderData, error: orderError } = await supabaseClient
         .from('orders')
@@ -85,6 +100,10 @@ export default function CheckoutClient() {
             customer_phone: profile.phone,
             customer_address: profile.address,
             user_id: user.id,
+            payment_method: paymentMethod, // Thêm phương thức thanh toán
+            payment_status: paymentStatus, // Thêm trạng thái thanh toán
+            expires_at: expiresAt, // Thêm thời gian hết hạn (nếu có)
+            total_amount: orderTotal // Lưu tổng tiền vào đơn hàng (Cần thêm cột này vào DB)
           },
         ])
         .select('id')
@@ -115,8 +134,13 @@ export default function CheckoutClient() {
         throw new Error('Lỗi khi lưu sản phẩm. Đơn hàng đã bị hủy.');
       }
 
-      clearCart();
-      router.push(`/order-success/${orderId}`);
+      // Chỉ xóa các sản phẩm đã được thanh toán khỏi giỏ hàng
+      const remainingCart = cart.filter(item => !selectedItemSlugs.includes(item.slug));
+      setCart(remainingCart);
+
+      // Chuyển hướng đến trang order-success, kèm theo phương thức thanh toán
+      router.push(`/order-success/${orderId}?paymentMethod=${paymentMethod}`);
+
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err);
@@ -139,7 +163,7 @@ export default function CheckoutClient() {
   }
 
   return (
-    <div className="flex justify-center items-center p-6 bg-gray-100">
+    <div className="flex justify-center items-center p-6 bg-gray-100 min-h-screen">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
         <h1 className="text-2xl font-bold mb-6 text-center">Xác nhận đơn hàng</h1>
         {error && <p className="text-red-500">{error}</p>}
@@ -189,6 +213,36 @@ export default function CheckoutClient() {
               className="w-full border rounded px-3 py-2 mt-1"
             />
           </div>
+
+          {/* Payment Method Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium mb-2">Phương thức thanh toán</label>
+            <div className="flex items-center space-x-4">
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="cod"
+                  checked={paymentMethod === 'cod'}
+                  onChange={() => setPaymentMethod('cod')}
+                  className="form-radio text-blue-600"
+                />
+                <span className="ml-2">Thanh toán khi nhận hàng (COD)</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="online"
+                  checked={paymentMethod === 'online'}
+                  onChange={() => setPaymentMethod('online')}
+                  className="form-radio text-blue-600"
+                />
+                <span className="ml-2">Thanh toán Online (Chuyển khoản QR)</span>
+              </label>
+            </div>
+          </div>
+
           <button
             onClick={placeOrder}
             disabled={isPlacingOrder || selectedCartItems.length === 0}

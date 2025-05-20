@@ -6,9 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "deploy": "next build"
-  },
+    "lint": "next lint"
+    },
   "dependencies": {
     "@reduxjs/toolkit": "^2.8.2",
     "@supabase/auth-helpers-react": "^0.5.0",

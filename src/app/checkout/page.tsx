@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 // import CheckoutSearchParamsHandler from '@/components/CheckoutSearchParamsHandler';
@@ -18,7 +18,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, clearCart } = useCart();
   // const searchParams = useSearchParams();
-  const [selectedItemSlugs, setSelectedItemSlugs] = useState<string[] | null>(null);
+  const [selectedItemSlugs] = useState<string[] | null>(null);
   const selectedCartItems = selectedItemSlugs
     ? cart.filter((item) => selectedItemSlugs.includes(item.slug))
     : [];

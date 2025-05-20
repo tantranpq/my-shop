@@ -23,14 +23,18 @@ type CartContextType = {
   addToCart: (product: Product) => void;
   removeFromCart: (slug: string) => void;
   clearCart: () => void;
+  notification: string | null;
+  setNotification: (message: string | null) => void;
+  incrementQuantity: (slug: string) => void; // Thêm hàm này
+  decrementQuantity: (slug: string) => void; // Thêm hàm này
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [notification, setNotification] = useState<string | null>(null);
 
-  // 🔁 Load từ localStorage khi tải trang
   useEffect(() => {
     const storedCart = localStorage.getItem("cart");
     if (storedCart) {
@@ -38,7 +42,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // 💾 Lưu vào localStorage khi cart thay đổi
   useEffect(() => {
     localStorage.setItem("cart", JSON.stringify(cart));
   }, [cart]);
@@ -55,16 +58,59 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { ...product, quantity: 1 }];
     });
+    setNotification(`Đã thêm "${product.name}" vào giỏ hàng!`);
+    setTimeout(() => {
+      setNotification(null);
+    }, 3000);
   };
 
   const removeFromCart = (slug: string) => {
     setCart((prev) => prev.filter((item) => item.slug !== slug));
+    setNotification(`Đã xóa sản phẩm khỏi giỏ hàng.`);
+    setTimeout(() => {
+      setNotification(null);
+    }, 3000);
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    setNotification('Giỏ hàng đã được làm trống.');
+    setTimeout(() => {
+      setNotification(null);
+    }, 3000);
+  };
+
+  const incrementQuantity = (slug: string) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.slug === slug ? { ...item, quantity: item.quantity + 1 } : item
+      )
+    );
+  };
+
+  const decrementQuantity = (slug: string) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.slug === slug && item.quantity > 1
+          ? { ...item, quantity: item.quantity - 1 }
+          : item
+      )
+    );
+  };
 
   return (
-    <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart }}>
+    <CartContext.Provider
+      value={{
+        cart,
+        addToCart,
+        removeFromCart,
+        clearCart,
+        notification,
+        setNotification,
+        incrementQuantity,
+        decrementQuantity,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

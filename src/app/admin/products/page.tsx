@@ -28,7 +28,6 @@ export default function AdminProductsPage() {
     const queryClient = useQueryClient();
 
     // State quản lý UI/Error
-    const [error, setError] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
     const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
@@ -162,7 +161,7 @@ export default function AdminProductsPage() {
             const fileName = `${uuidv4()}.${fileExtension}`;
             const filePath = `product_images/${fileName}`;
 
-            const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            const { error: uploadError } = await supabaseClient.storage
                 .from('product-images')
                 .upload(filePath, selectedImageFile, {
                     cacheControl: '3600',
@@ -450,7 +449,7 @@ export default function AdminProductsPage() {
             {products && products.length === 0 && !debouncedSearchQuery ? (
                 <p className="text-center text-gray-600 text-lg">Chưa có sản phẩm nào.</p>
             ) : products && products.length === 0 && debouncedSearchQuery ? (
-                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với "{debouncedSearchQuery}".</p>
+                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với '{debouncedSearchQuery}'</p>
             ) : (
                 <div className="overflow-x-auto bg-white shadow-md rounded-lg">
                     <table className="min-w-full divide-y divide-gray-200">

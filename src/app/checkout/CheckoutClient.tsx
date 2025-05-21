@@ -6,19 +6,19 @@ import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 
-// Import Product interface - Đảm bảo id là string để đồng bộ với CartContext
-interface Product {
-  id: string; // Đã thay đổi id thành string
-  name: string;
-  description: string | null;
-  price: number;
-  image: string | null;
-  stock_quantity: number;
-  category: string | null;
-  created_at: string;
-  updated_at: string;
-  slug: string | null;
-}
+// Loại bỏ interface Product không sử dụng trực tiếp
+// interface Product {
+//   id: string;
+//   name: string;
+//   description: string | null;
+//   price: number;
+//   image: string | null;
+//   stock_quantity: number;
+//   category: string | null;
+//   created_at: string;
+//   updated_at: string;
+//   slug: string | null;
+// }
 
 interface Profile {
   full_name: string | null;
@@ -70,7 +70,7 @@ export default function CheckoutClient() {
       setLoading(true);
       setError(null);
 
-      let itemsToCheckout: ProductWithQuantity[] = [];
+      const itemsToCheckout: ProductWithQuantity[] = []; // Đã thay đổi 'let' thành 'const'
 
       console.log("itemsParam from URL:", itemsParam); // Debugging: Kiểm tra tham số 'items' từ URL
 

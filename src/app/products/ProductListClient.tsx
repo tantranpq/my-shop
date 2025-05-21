@@ -5,7 +5,7 @@ import '@/app/globals.css';
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Đã thêm useCallback
+import React, { useState, useMemo, useCallback } from 'react'; // Đã thêm useCallback
 import { Product } from "@/types/product"; // Đã bỏ comment để import Product từ file chung
 import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Heart } from 'lucide-react'; // Import icons for collapse/expand and navigation, and Heart icon

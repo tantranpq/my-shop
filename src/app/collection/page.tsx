@@ -2,7 +2,7 @@
 
 import '@/app/globals.css';
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/lib/supabase";
+// import { supabase } from "@/lib/supabase";
 import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
 import React, { useState, useEffect } from 'react';
 import Link from "next/link";
@@ -18,7 +18,7 @@ export default function CollectionPage() {
     const queryClient = useQueryClient();
     const router = useRouter(); // Initialize useRouter
 
-    const [error, setError] = useState<string | null>(null);
+    const [error] = useState<string | null>(null);
 
     // Sử dụng useQuery để fetch sản phẩm yêu thích
     const { data: favoriteProducts = [], isLoading: loading, error: queryError, refetch } = useQuery<Product[], Error>({

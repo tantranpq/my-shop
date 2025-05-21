@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
+import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
 
 // --- Interfaces for Product Data ---
 interface Product {
@@ -20,6 +21,105 @@ interface Product {
     slug: string | null; // <-- Đã thêm slug
 }
 
+// --- MultiSelect Component ---
+interface MultiSelectOption {
+    value: string;
+    label: string;
+}
+
+interface MultiSelectProps {
+    options: MultiSelectOption[];
+    selectedValues: string[];
+    onChange: (values: string[]) => void;
+    placeholder?: string;
+}
+
+const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onChange, placeholder = "Chọn..." }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [wrapperRef]);
+
+    const handleToggleOption = (value: string) => {
+        let newSelectedValues: string[];
+
+        if (value === 'all') {
+            newSelectedValues = ['all'];
+        } else {
+            // If 'all' was previously selected, start with only the new value
+            if (selectedValues.includes('all')) {
+                newSelectedValues = [value];
+            } else if (selectedValues.includes(value)) {
+                // Deselect the value
+                newSelectedValues = selectedValues.filter(v => v !== value);
+            } else {
+                // Select the value
+                newSelectedValues = [...selectedValues, value];
+            }
+
+            // If no specific options are selected, default to 'all'
+            if (newSelectedValues.length === 0) {
+                newSelectedValues = ['all'];
+            }
+        }
+        onChange(newSelectedValues);
+    };
+
+    const displayLabel = useMemo(() => {
+        if (selectedValues.includes('all') || selectedValues.length === 0) {
+            return options.find(opt => opt.value === 'all')?.label || placeholder;
+        }
+        return selectedValues
+            .map(val => options.find(opt => opt.value === val)?.label)
+            .filter(Boolean)
+            .join(', ');
+    }, [selectedValues, options, placeholder]);
+
+    return (
+        <div className="relative" ref={wrapperRef}>
+            <button
+                type="button"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex justify-between items-center"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className="truncate">{displayLabel}</span>
+                {isOpen ? <ChevronUp className="h-4 w-4 ml-2 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 ml-2 flex-shrink-0" />}
+            </button>
+            {isOpen && (
+                <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200 max-h-60 overflow-y-auto">
+                    {options.map((option) => (
+                        <div
+                            key={option.value}
+                            className="flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100"
+                            onClick={() => handleToggleOption(option.value)}
+                        >
+                            <input
+                                type="checkbox"
+                                readOnly
+                                checked={selectedValues.includes(option.value)}
+                                className="mr-2"
+                            />
+                            <span>{option.label}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+// --- End MultiSelect Component ---
+
+
 // --- Component chính AdminProductsPage ---
 export default function AdminProductsPage() {
     const supabaseClient = useSupabaseClient();
@@ -28,6 +128,7 @@ export default function AdminProductsPage() {
     const queryClient = useQueryClient();
 
     // State quản lý UI/Error
+    const [error, setError] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
     const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
@@ -43,9 +144,11 @@ export default function AdminProductsPage() {
     const offset = currentPage * itemsPerPage;
     const limit = itemsPerPage;
 
-    // States cho Tìm kiếm
+    // States cho Tìm kiếm và Lọc
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState<string[]>(['all']); // Changed to array for multi-select
+    const [stockQuantityFilter, setStockQuantityFilter] = useState<number | ''>(''); // New state for stock quantity filter
 
     // Debounce effect cho tìm kiếm
     useEffect(() => {
@@ -87,8 +190,8 @@ export default function AdminProductsPage() {
         data: productsData,
         isLoading: isLoadingProducts,
         error: productsQueryError,
-    } = useQuery<{ products: Product[], totalCount: number | null }, Error>({
-        queryKey: ['adminProducts', currentPage, debouncedSearchQuery],
+    } = useQuery< { products: Product[], totalCount: number | null }, Error>({
+        queryKey: ['adminProducts', currentPage, debouncedSearchQuery, categoryFilter, stockQuantityFilter], // Add new filters to queryKey
         queryFn: async () => {
             if (userRole !== 'admin') {
                 throw new Error('Bạn không có quyền xem sản phẩm.');
@@ -107,12 +210,22 @@ export default function AdminProductsPage() {
                   category,
                   created_at,
                   updated_at,
-                  slug 
+                  slug
                 `, { count: 'exact' });
 
             // Áp dụng tìm kiếm nếu có
             if (debouncedSearchQuery) {
                 query = query.or(`name.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
+            }
+
+            // Apply category filter (multi-select)
+            if (categoryFilter.length > 0 && !categoryFilter.includes('all')) {
+                query = query.in('category', categoryFilter);
+            }
+
+            // Apply stock quantity filter
+            if (stockQuantityFilter !== '' && stockQuantityFilter >= 0) {
+                query = query.gte('stock_quantity', stockQuantityFilter);
             }
 
             const { data, error, count } = await query
@@ -131,6 +244,40 @@ export default function AdminProductsPage() {
     const products = productsData?.products || [];
     const totalProducts = productsData?.totalCount || 0;
     const totalPages = Math.ceil(totalProducts / itemsPerPage);
+
+    // --- NEW: UseQuery để lấy tất cả danh mục độc lập ---
+    const { data: allCategoriesRaw, isLoading: isLoadingAllCategories } = useQuery<
+        { category: string }[],
+        Error
+    >({
+        queryKey: ['allCategories'],
+        queryFn: async () => {
+            const { data, error } = await supabaseClient
+                .from('products')
+                .select('category')
+                .not('category', 'is', null); // Removed .distinct() from here
+
+            if (error) throw error;
+            return data as { category: string }[];
+        },
+        enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
+        staleTime: 1000 * 60 * 5, // Categories don't change often, longer stale time
+    });
+
+    // Extract unique categories for the filter dropdown from allCategoriesRaw
+    const uniqueCategoriesOptions: MultiSelectOption[] = useMemo(() => {
+        const categories = new Set<string>();
+        if (allCategoriesRaw && Array.isArray(allCategoriesRaw)) {
+            allCategoriesRaw.forEach(item => {
+                if (item.category) {
+                    categories.add(item.category);
+                }
+            });
+        }
+        const sortedCategories = Array.from(categories).sort();
+        return [{ value: 'all', label: 'Tất cả' }, ...sortedCategories.map(cat => ({ value: cat, label: cat }))];
+    }, [allCategoriesRaw]);
+
 
     // --- Hàm xử lý thêm/cập nhật sản phẩm ---
     const handleSaveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -161,7 +308,7 @@ export default function AdminProductsPage() {
             const fileName = `${uuidv4()}.${fileExtension}`;
             const filePath = `product_images/${fileName}`;
 
-            const { error: uploadError } = await supabaseClient.storage
+            const { data: uploadData, error: uploadError } = await supabaseClient.storage
                 .from('product-images')
                 .upload(filePath, selectedImageFile, {
                     cacheControl: '3600',
@@ -209,6 +356,7 @@ export default function AdminProductsPage() {
             toast.error('Lỗi khi lưu sản phẩm: ' + error.message);
         } else {
             queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
+            queryClient.invalidateQueries({ queryKey: ['allCategories'] }); // Invalidate allCategories to update filter options
             setIsFormOpen(false);
             setEditingProduct(null);
             setSelectedImageFile(null);
@@ -266,15 +414,16 @@ export default function AdminProductsPage() {
             toast.error('Lỗi khi xóa sản phẩm: ' + error.message);
         } else {
             queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
+            queryClient.invalidateQueries({ queryKey: ['allCategories'] }); // Invalidate allCategories to update filter options
             toast.success('Sản phẩm đã được xóa thành công!');
         }
     };
 
     // --- Render logic dựa trên trạng thái ---
-    if (isLoadingSession || isLoadingProfile || isLoadingProducts) {
+    if (isLoadingSession || isLoadingProfile || isLoadingProducts || isLoadingAllCategories) {
         return (
             <div className="min-h-screen flex items-center justify-center text-xl text-gray-700">
-                {isLoadingSession ? "Đang tải phiên đăng nhập..." : isLoadingProfile ? "Đang kiểm tra quyền..." : "Đang tải sản phẩm..."}
+                {isLoadingSession ? "Đang tải phiên đăng nhập..." : isLoadingProfile ? "Đang kiểm tra quyền..." : "Đang tải sản phẩm và danh mục..."}
             </div>
         );
     }
@@ -312,6 +461,35 @@ export default function AdminProductsPage() {
                 </button>
             </div>
 
+            {/* Các bộ lọc */}
+            <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Lọc theo Danh mục */}
+                <div>
+                    <label htmlFor="categoryFilter" className="block text-gray-700 text-sm font-bold mb-2">Danh mục</label>
+                    <MultiSelect
+                        options={uniqueCategoriesOptions}
+                        selectedValues={categoryFilter}
+                        onChange={setCategoryFilter}
+                        placeholder="Chọn danh mục"
+                    />
+                </div>
+
+                {/* Lọc theo Tồn kho tối thiểu */}
+                <div>
+                    <label htmlFor="stockQuantityFilter" className="block text-gray-700 text-sm font-bold mb-2">Tồn kho tối thiểu</label>
+                    <input
+                        type="number"
+                        id="stockQuantityFilter"
+                        value={stockQuantityFilter}
+                        onChange={(e) => setStockQuantityFilter(e.target.value === '' ? '' : parseInt(e.target.value))}
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        placeholder="Số lượng tối thiểu"
+                        min="0"
+                    />
+                </div>
+            </div>
+
+
             {/* Form thêm/chỉnh sửa sản phẩm (Modal/Overlay) */}
             {isFormOpen && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -343,7 +521,7 @@ export default function AdminProductsPage() {
                             </div>
                             {/* Input cho Slug */}
                             <div className="mb-4">
-                                <label htmlFor="slug" className="block text-gray-700 text-sm font-bold mb-2">Slug:</label>
+                                 <label htmlFor="slug" className="block text-gray-700 text-sm font-bold mb-2">Slug:</label>
                                 <input
                                     type="text"
                                     id="slug"
@@ -458,7 +636,7 @@ export default function AdminProductsPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tên sản phẩm</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mô tả</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th> {/* <-- Đã thêm cột Slug */}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Slug</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tồn kho</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Danh mục</th>
@@ -472,7 +650,7 @@ export default function AdminProductsPage() {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">...{String(product.id).slice(-8)}</td>
                                     <td className="px-6 py-4 text-sm text-gray-900 font-medium">{product.name}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.description || 'N/A'}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.slug || 'N/A'}</td> {/* <-- Hiển thị slug */}
+                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.slug || 'N/A'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.stock_quantity}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category || 'N/A'}</td>
@@ -521,8 +699,9 @@ export default function AdminProductsPage() {
                             <li key={index}>
                                 <button
                                     onClick={() => setCurrentPage(index)}
-                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
-                                        }`}
+                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${
+                                        currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
+                                    }`}
                                 >
                                     {index + 1}
                                 </button>

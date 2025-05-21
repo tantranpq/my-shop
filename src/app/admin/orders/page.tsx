@@ -27,7 +27,7 @@ interface Order {
 }
 
 // Các trạng thái thanh toán thực tế từ database (dùng cho logic và mapping)
-const PAYMENT_STATUSES = ['paid', 'failed', 'refunded', 'pending_online', 'confirmed', 'unconfirmed_cod', 'completed'];
+// const PAYMENT_STATUSES = ['paid', 'failed', 'refunded', 'pending_online', 'confirmed', 'unconfirmed_cod', 'completed'];
 
 // Các trạng thái có thể cập nhật qua dropdown (giá trị thực tế sẽ được gửi đi)
 const UPDATABLE_STATUSES = ['unconfirmed_cod', 'pending_online', 'confirmed', 'paid', 'failed', 'refunded', 'completed'];
@@ -264,7 +264,7 @@ export default function AdminOrdersPage() {
     const [paymentMethodFilter, setPaymentMethodFilter] = useState<string | 'all'>('all'); // New state for payment method filter
 
     // --- Logic fetch vai trò người dùng và kiểm tra quyền admin ---
-    const { data: profileData, isLoading: isLoadingProfile, error: profileError } = useQuery({
+    const { data: profileData, isLoading: isLoadingProfile } = useQuery({
         queryKey: ['userProfile', user?.id],
         queryFn: async () => {
             if (!user?.id) return null;

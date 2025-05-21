@@ -1,4 +1,3 @@
-
 "use client";
 import Navbar from "@/components/Navbar";
 export const dynamic = "force-dynamic";
@@ -9,11 +8,19 @@ import { User, useUser } from '@supabase/auth-helpers-react';
 import { useState } from 'react';
 
 export default function CartPage() {
-  const { cart, removeFromCart, incrementQuantity, decrementQuantity, clearCart } = useCart(); // Thêm incrementQuantity và decrementQuantity
+  const { cart, removeFromCart, incrementQuantity, decrementQuantity, clearCart } = useCart();
   const userObject = useUser();
   const user = userObject as User | null;
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // Tạo chuỗi truy vấn cho các sản phẩm đã chọn, bao gồm cả số lượng
+  const checkoutQueryItems = selectedItems.map(slug => {
+      const itemInCart = cart.find(cartItem => cartItem.slug === slug);
+      // Nếu tìm thấy sản phẩm trong giỏ hàng, trả về định dạng "slug:quantity"
+      // Nếu không, trả về chuỗi rỗng để lọc bỏ sau này
+      return itemInCart ? `${itemInCart.slug}:${itemInCart.quantity}` : '';
+  }).filter(Boolean).join(','); // Lọc bỏ các chuỗi rỗng và nối lại bằng dấu phẩy
 
   return (
         <>
@@ -28,13 +35,22 @@ export default function CartPage() {
           {cart.map((item) => (
             <div key={item.slug} className="border-b py-2 flex justify-between items-center gap-4">
               <div className="w-20 h-20 rounded overflow-hidden relative">
-                <Image
-                  src={item.image}
-                  alt={item.name}
-                  layout="fill"
-                  objectFit="cover"
-                  className="rounded"
-                />
+                {/* Đảm bảo sử dụng Image component đúng cách với 'fill' và 'style' */}
+                {item.image ? (
+                  <Image
+                    src={item.image}
+                    alt={item.name}
+                    fill
+                    style={{ objectFit: 'cover' }}
+                    className="rounded"
+                  />
+                ) : (
+                  <img
+                    src="https://placehold.co/80x80/cccccc/333333?text=No+Image" // Fallback placeholder
+                    alt="No Image"
+                    className="w-full h-full object-cover rounded"
+                  />
+                )}
               </div>
               <div className="flex-grow">
                 <p className="font-semibold">{item.name}</p>
@@ -53,7 +69,8 @@ export default function CartPage() {
                     +
                   </button>
                 </div>
-                <p className="text-gray-600 text-sm">{item.price} đ</p>
+                {/* Định dạng giá tiền */}
+                <p className="text-gray-600 text-sm">{item.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
               </div>
               <button
                 onClick={() => removeFromCart(item.slug)}
@@ -76,7 +93,8 @@ export default function CartPage() {
             </div>
           ))}
 
-          <p className="text-lg font-bold mt-4">Tổng cộng: {total} đ</p>
+          {/* Định dạng tổng tiền */}
+          <p className="text-lg font-bold mt-4">Tổng cộng: {total.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
 
           {!user ? (
             <p className="mt-4">
@@ -87,7 +105,7 @@ export default function CartPage() {
             <Link
               href={{
                 pathname: "/checkout",
-                query: { items: selectedItems.join(',') },
+                query: { items: checkoutQueryItems }, // Sử dụng chuỗi truy vấn mới
               }}
               className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4 block text-center ${selectedItems.length === 0 ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
             >

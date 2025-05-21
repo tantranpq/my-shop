@@ -6,6 +6,20 @@ import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 
+// Import Product interface - Đảm bảo id là string để đồng bộ với CartContext
+interface Product {
+  id: string; // Đã thay đổi id thành string
+  name: string;
+  description: string | null;
+  price: number;
+  image: string | null;
+  stock_quantity: number;
+  category: string | null;
+  created_at: string;
+  updated_at: string;
+  slug: string | null;
+}
+
 interface Profile {
   full_name: string | null;
   phone: string | null;
@@ -19,11 +33,10 @@ export default function CheckoutClient() {
   const router = useRouter();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
-  const { cart, setCart } = useCart();
+  const { cart, setCart } = useCart(); // Giữ lại setCart để cập nhật giỏ hàng sau khi đặt
 
-  const selectedItemSlugs = searchParams.get('items')?.split(',') || [];
-  const selectedCartItems = cart.filter((item) => selectedItemSlugs.includes(item.slug));
-  const orderTotal = selectedCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0); // Tính tổng tiền
+  // Lấy tham số 'items' từ URL. Nó có thể là một slug đơn hoặc nhiều slug cách nhau bởi dấu phẩy.
+  const itemsParam = searchParams.get('items');
 
   const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', address: '' });
   const [loading, setLoading] = useState(true);
@@ -32,29 +45,102 @@ export default function CheckoutClient() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
 
+  // Interface tạm thời cho sản phẩm có số lượng, đảm bảo id là string
+  interface ProductWithQuantity {
+    id: string; // Đã thay đổi id thành string
+    name: string;
+    price: number;
+    image: string | null;
+    slug: string | null;
+    quantity: number;
+  }
+
+  // State để lưu sản phẩm mua ngay hoặc các sản phẩm đã chọn từ giỏ hàng
+  const [checkoutItems, setCheckoutItems] = useState<ProductWithQuantity[]>([]);
+  const [totalAmount, setTotalAmount] = useState(0);
+
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user?.id) return;
+    const fetchCheckoutItemsAndProfile = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
 
       setLoading(true);
-      const { data, error } = await supabaseClient
+      setError(null);
+
+      let itemsToCheckout: ProductWithQuantity[] = [];
+
+      console.log("itemsParam from URL:", itemsParam); // Debugging: Kiểm tra tham số 'items' từ URL
+
+      if (itemsParam) {
+          const itemPairs = itemsParam.split(','); // Tách chuỗi thành các cặp "slug:quantity"
+          for (const pair of itemPairs) {
+              const [slug, quantityStr] = pair.split(':'); // Tách từng cặp thành slug và quantity
+              const quantity = parseInt(quantityStr, 10); // Chuyển đổi quantity sang số nguyên
+
+              console.log(`Processing pair: ${pair}, Slug: ${slug}, Quantity String: ${quantityStr}, Parsed Quantity: ${quantity}`); // Debugging
+
+              if (slug && !isNaN(quantity) && quantity > 0) {
+                  // Fetch product details from DB using the slug
+                  const { data: productData, error: productError } = await supabaseClient
+                      .from('products')
+                      .select('id, name, price, image, slug') // Chỉ chọn các trường cần thiết
+                      .eq('slug', slug)
+                      .single();
+
+                  console.log(`Supabase fetch result for slug "${slug}":`); // Debugging
+                  console.log("Product Data:", productData); // Debugging
+                  console.log("Product Error:", productError); // Debugging
+
+                  if (productError || !productData) {
+                      setError('Không thể tải thông tin cho sản phẩm: ' + slug + '.');
+                      console.error(`Error fetching product ${slug}:`, productError?.message || 'Product not found.');
+                      // Không return ở đây để cố gắng tải các sản phẩm khác nếu có
+                      continue; // Bỏ qua sản phẩm lỗi và tiếp tục với các sản phẩm khác
+                  }
+
+                  itemsToCheckout.push({
+                      id: productData.id, // id đã là string, không cần parseInt
+                      name: productData.name,
+                      price: productData.price,
+                      image: productData.image,
+                      slug: productData.slug,
+                      quantity: quantity // Sử dụng số lượng lấy từ URL
+                  });
+              } else {
+                  console.error(`Invalid item pair in URL: ${pair}`); // Debugging
+              }
+          }
+      }
+
+      if (itemsToCheckout.length === 0) {
+        setError('Không có sản phẩm nào để thanh toán.');
+      }
+
+      setCheckoutItems(itemsToCheckout);
+      setTotalAmount(itemsToCheckout.reduce((sum, item) => sum + item.price * item.quantity, 0));
+
+      // Fetch profile data
+      const { data: profileData, error: profileError } = await supabaseClient
         .from('profiles')
         .select('full_name, phone, address')
         .eq('id', user.id)
         .single();
 
-      if (error) {
+      if (profileError) {
         setError('Không thể tải thông tin cá nhân.');
-        console.error(error.message);
-      } else if (data) {
-        setProfile(data);
+        console.error(profileError.message);
+      } else if (profileData) {
+        setProfile(profileData);
       }
 
       setLoading(false);
     };
 
-    fetchProfile();
-  }, [user?.id, supabaseClient]);
+    fetchCheckoutItemsAndProfile();
+  }, [user?.id, supabaseClient, itemsParam]); // Loại bỏ 'cart' khỏi dependencies vì nó không phải là nguồn chính cho checkoutItems
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -62,7 +148,10 @@ export default function CheckoutClient() {
   };
 
   const placeOrder = async () => {
-    if (!user || selectedCartItems.length === 0) return;
+    if (!user || checkoutItems.length === 0) {
+        setOrderError('Không có sản phẩm nào để đặt hàng hoặc bạn chưa đăng nhập.');
+        return;
+    }
 
     setIsPlacingOrder(true);
     setOrderError(null);
@@ -103,7 +192,7 @@ export default function CheckoutClient() {
             payment_method: paymentMethod, // Thêm phương thức thanh toán
             payment_status: paymentStatus, // Thêm trạng thái thanh toán
             expires_at: expiresAt, // Thêm thời gian hết hạn (nếu có)
-            total_amount: orderTotal // Lưu tổng tiền vào đơn hàng (Cần thêm cột này vào DB)
+            total_amount: totalAmount // Lưu tổng tiền vào đơn hàng
           },
         ])
         .select('id')
@@ -116,9 +205,9 @@ export default function CheckoutClient() {
       const orderId = orderData.id;
 
       // Tạo order_items
-      const items = selectedCartItems.map((item) => ({
+      const items = checkoutItems.map((item) => ({
         order_id: orderId,
-        product_id: item.id,
+        product_id: item.id, // item.id đã là string
         product_name: item.name,
         product_price: item.price,
         quantity: item.quantity,
@@ -135,8 +224,11 @@ export default function CheckoutClient() {
       }
 
       // Chỉ xóa các sản phẩm đã được thanh toán khỏi giỏ hàng
-      const remainingCart = cart.filter(item => !selectedItemSlugs.includes(item.slug));
-      setCart(remainingCart);
+      // Lấy danh sách slug của các sản phẩm đã được checkout
+      const checkedOutSlugs = checkoutItems.map(item => item.slug);
+      // Lọc giỏ hàng hiện tại để loại bỏ các sản phẩm đã được checkout
+      const remainingCart = cart.filter(item => !checkedOutSlugs.includes(item.slug));
+      setCart(remainingCart); // Cập nhật giỏ hàng trong context và localStorage
 
       // Chuyển hướng đến trang order-success, kèm theo phương thức thanh toán
       router.push(`/order-success/${orderId}?paymentMethod=${paymentMethod}`);
@@ -171,16 +263,19 @@ export default function CheckoutClient() {
 
         <h2 className="text-lg font-semibold mb-2">Sản phẩm đã chọn:</h2>
         <ul className="mb-4 text-sm">
-          {selectedCartItems.map((item) => (
+          {checkoutItems.map((item) => (
             <li key={item.slug}>
-              {item.name} × {item.quantity} — {item.price.toLocaleString()} đ
+              {item.name} × {item.quantity} — {item.price.toLocaleString('vi-VN')} đ
             </li>
           ))}
         </ul>
 
-        {selectedCartItems.length === 0 && (
+        {checkoutItems.length === 0 && (
           <p className="text-red-500 mb-4">Không có sản phẩm nào được chọn.</p>
         )}
+
+        <p className="text-lg font-bold mt-4">Tổng cộng: {totalAmount.toLocaleString('vi-VN')} đ</p>
+
 
         <form onSubmit={(e) => e.preventDefault()}>
           <div className="mb-4">
@@ -245,8 +340,8 @@ export default function CheckoutClient() {
 
           <button
             onClick={placeOrder}
-            disabled={isPlacingOrder || selectedCartItems.length === 0}
-            className={`w-full py-2 text-white font-semibold rounded ${isPlacingOrder || selectedCartItems.length === 0
+            disabled={isPlacingOrder || checkoutItems.length === 0}
+            className={`w-full py-2 text-white font-semibold rounded ${isPlacingOrder || checkoutItems.length === 0
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700'
               }`}

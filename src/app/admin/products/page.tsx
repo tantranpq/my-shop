@@ -128,7 +128,7 @@ export default function AdminProductsPage() {
     const queryClient = useQueryClient();
 
     // State quản lý UI/Error
-    const [error, setError] = useState<string | null>(null);
+    // const [error, setError] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
     const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
@@ -308,7 +308,7 @@ export default function AdminProductsPage() {
             const fileName = `${uuidv4()}.${fileExtension}`;
             const filePath = `product_images/${fileName}`;
 
-            const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            const { error: uploadError } = await supabaseClient.storage
                 .from('product-images')
                 .upload(filePath, selectedImageFile, {
                     cacheControl: '3600',

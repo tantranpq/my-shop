@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import React, { useState, useMemo, useCallback } from 'react'; // Đã thêm useCallback
 import { Product } from "@/types/product"; // Đã bỏ comment để import Product từ file chung
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation'; // Đã thêm useRouter
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Heart } from 'lucide-react'; // Import icons for collapse/expand and navigation, and Heart icon
 import { useUser } from '@supabase/auth-helpers-react'; // Import useUser hook
 
@@ -32,6 +32,7 @@ async function getProducts(searchTerm: string | null): Promise<Product[]> {
 export default function ProductPageClient() {
     const { addToCart } = useCart();
     const searchParams = useSearchParams();
+    const router = useRouter(); // Khởi tạo useRouter
     const searchTerm = searchParams.get("search");
     const user = useUser(); // Lấy thông tin người dùng hiện tại
 
@@ -45,7 +46,7 @@ export default function ProductPageClient() {
     // State để lưu trữ ID của các sản phẩm yêu thích của người dùng hiện tại
     // Set này sẽ lưu trữ number thay vì string
     const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
-    // State để quản lý thông báo tùy chỉnh
+    // State để quản lý thông báo tùy chỉnh - ĐÃ PHỤC HỒI
     const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
 
@@ -98,7 +99,7 @@ export default function ProductPageClient() {
         fetchFavorites();
     }, [fetchFavorites]); // Depend on fetchFavorites
 
-    // Effect để tự động ẩn thông báo sau 2 giây
+    // Effect để tự động ẩn thông báo sau 2 giây - ĐÃ PHỤC HỒI
     React.useEffect(() => {
         if (message) {
             const timer = setTimeout(() => {
@@ -111,13 +112,24 @@ export default function ProductPageClient() {
 
     const handleAddToCart = (product: Product) => {
         addToCart(product);
-        setMessage({ type: 'success', text: `Đã thêm ${product.name} vào giỏ hàng.` });
+        setMessage({ type: 'success', text: `Đã thêm ${product.name} vào giỏ hàng.` }); // ĐÃ PHỤC HỒI
+    };
+
+    // Hàm xử lý khi nhấn nút "Mua ngay"
+    const handleBuyNow = (product: Product) => {
+        if (!product.slug) {
+            setMessage({ type: 'error', text: 'Không thể mua ngay sản phẩm này (thiếu slug).' }); // ĐÃ PHỤC HỒI
+            return;
+        }
+        // Chuyển hướng đến trang thanh toán với sản phẩm đơn lẻ
+        // Định dạng URL: /checkout?items=product_slug:1
+        router.push(`/checkout?items=${product.slug}:1`);
     };
 
     // Hàm để chuyển đổi trạng thái yêu thích của một sản phẩm
     const handleToggleFavorite = async (product: Product) => {
         if (!user) {
-            setMessage({ type: 'info', text: 'Vui lòng đăng nhập để thêm sản phẩm vào danh sách yêu thích.' });
+            setMessage({ type: 'info', text: 'Vui lòng đăng nhập để thêm sản phẩm vào danh sách yêu thích.' }); // ĐÃ PHỤC HỒI
             return;
         }
 
@@ -128,7 +140,7 @@ export default function ProductPageClient() {
             // Cập nhật UI lạc quan: Xóa khỏi Set trước khi gọi API
             newFavorites.delete(product.id);
             setFavoriteProductIds(newFavorites);
-            setMessage({ type: 'success', text: `Đã xóa "${product.name}" khỏi danh sách yêu thích.` });
+            setMessage({ type: 'success', text: `Đã xóa "${product.name}" khỏi danh sách yêu thích.` }); // ĐÃ PHỤC HỒI
 
             // Gọi API để xóa khỏi yêu thích
             const { error } = await supabase
@@ -139,7 +151,7 @@ export default function ProductPageClient() {
 
             if (error) {
                 console.error('Lỗi khi xóa sản phẩm yêu thích:', error);
-                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi xóa sản phẩm yêu thích.' });
+                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi xóa sản phẩm yêu thích.' }); // ĐÃ PHỤC HỒI
                 // Hoàn tác cập nhật UI nếu có lỗi
                 setFavoriteProductIds(prev => new Set(prev).add(product.id));
             }
@@ -147,7 +159,7 @@ export default function ProductPageClient() {
             // Cập nhật UI lạc quan: Thêm vào Set trước khi gọi API
             newFavorites.add(product.id);
             setFavoriteProductIds(newFavorites);
-            setMessage({ type: 'success', text: `Đã thêm "${product.name}" vào danh sách yêu thích.` });
+            setMessage({ type: 'success', text: `Đã thêm "${product.name}" vào danh sách yêu thích.` }); // ĐÃ PHỤC HỒI
 
             // Gọi API để thêm vào yêu thích
             const { error } = await supabase
@@ -156,7 +168,7 @@ export default function ProductPageClient() {
 
             if (error) {
                 console.error('Lỗi khi thêm sản phẩm yêu thích:', error);
-                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi thêm sản phẩm yêu thích.' });
+                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi thêm sản phẩm yêu thích.' }); // ĐÃ PHỤC HỒI
                 // Hoàn tác cập nhật UI nếu có lỗi
                 setFavoriteProductIds(prev => {
                     const revertSet = new Set(prev);
@@ -167,7 +179,7 @@ export default function ProductPageClient() {
         }
 
         // Luôn tải lại danh sách yêu thích từ DB để đảm bảo đồng bộ cuối cùng
-        await fetchFavorites();
+        // await fetchFavorites(); // Removed to prevent double fetch, optimistic update is enough
     };
 
 
@@ -260,7 +272,7 @@ export default function ProductPageClient() {
                         : "Tất cả Sản phẩm"}
                 </h1>
 
-                {/* Custom Message Box */}
+                {/* Custom Message Box - ĐÃ PHỤC HỒI */}
                 {message && (
                     <div
                         className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white z-50
@@ -339,21 +351,26 @@ export default function ProductPageClient() {
                                                                 {product.name}
                                                             </Link>
                                                         </h3>
-                                                        <p className="text-gray-800 font-semibold mb-3 text-lg">
-                                                            {product.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+                                                        <p className="text-red-600 font-semibold mb-3 text-lg">
+                                                            {product.price.toLocaleString('vi-VN')} <sup className="underline">đ</sup>
                                                         </p>
-                                                        <p className="text-sm text-gray-600 flex-grow mb-4">
-                                                            {/* Added explicit string check for product.description */}
-                                                            {typeof product.description === 'string' && product.description !== null && product.description !== ''
-                                                                ? `${product.description.substring(0, 100)}...`
-                                                                : 'Không có mô tả cho sản phẩm này.'}
-                                                        </p>
-                                                        <button
-                                                            className="mt-auto bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-md"
-                                                            onClick={() => handleAddToCart(product)}
-                                                        >
-                                                            Thêm vào giỏ hàng
-                                                        </button>
+                                                        {/* Dòng mô tả đã bị xóa khỏi đây */}
+                                                        <div className="flex space-x-2 mt-auto"> {/* Flex container for buttons */}
+                                                            <button
+                                                                // Đã điều chỉnh padding và font size
+                                                                className="flex-1 bg-blue-100 text-blue-700 px-3 py-2 text-sm rounded-lg font-medium hover:bg-blue-200 transition-colors shadow-md"
+                                                                onClick={() => handleAddToCart(product)}
+                                                            >
+                                                                Thêm vào giỏ hàng
+                                                            </button>
+                                                            <button
+                                                                // Đã điều chỉnh padding và font size
+                                                                className="flex-1 bg-green-100 text-green-700 px-3 py-2 text-sm rounded-lg font-medium hover:bg-green-200 transition-colors shadow-md"
+                                                                onClick={() => handleBuyNow(product)}
+                                                            >
+                                                                Mua ngay
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}

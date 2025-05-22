@@ -23,7 +23,7 @@ const Navbar = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/');
   };
 
   // const handleDesktopLoginClick = () => {
@@ -124,7 +124,7 @@ const Navbar = () => {
               <User size={24} />
             </Link>
           ) : (
-            <Link href={`/login?redirectTo=${pathname}`} className={styles.iconLink}>
+            <Link href={`/login?returnTo=${encodeURIComponent(pathname)}`} className={styles.iconLink}>
               Đăng nhập
             </Link>
           )}
@@ -152,7 +152,7 @@ const Navbar = () => {
               <User size={24} />
             </Link>
           ) : (
-            <Link href={`/login?redirectTo=${pathname}`} className={styles.iconLink}>
+            <Link href={`/login?returnTo=${encodeURIComponent(pathname)}`} className={styles.iconLink}>
               Đăng nhập
             </Link>
           )}

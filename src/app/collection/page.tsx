@@ -9,7 +9,7 @@ import Link from "next/link";
 import { Product } from "@/types/product";
 import { useCart } from "@/context/CartContext";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter, usePathname } from 'next/navigation'; // Import useRouter
 
 export default function CollectionPage() {
     const user = useUser();
@@ -17,7 +17,7 @@ export default function CollectionPage() {
     const { addToCart } = useCart();
     const queryClient = useQueryClient();
     const router = useRouter(); // Initialize useRouter
-
+const pathname = usePathname();
     const [error] = useState<string | null>(null);
 
     // Sử dụng useQuery để fetch sản phẩm yêu thích
@@ -145,7 +145,7 @@ export default function CollectionPage() {
                 <main className="max-w-2xl mx-auto p-6 text-center">
                     <h1 className="text-2xl font-bold mb-4">Bộ sưu tập của bạn</h1>
                     <p className="text-gray-700">Vui lòng đăng nhập để xem các sản phẩm yêu thích của bạn.</p>
-                    <Link href="/login" className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    <Link href={`/login?returnTo=${encodeURIComponent(pathname)}`} className="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
                         Đăng nhập
                     </Link>
                 </main>

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Import useSearchParams
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const supabaseClient = useSupabaseClient();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Lấy search params từ URL
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +26,10 @@ export default function LoginPage() {
     if (authError) {
       setError(authError.message);
     } else {
-      router.push('/cart'); // Chuyển hướng về trang giỏ hàng sau khi đăng nhập thành công
+      // Lấy URL chuyển hướng từ query parameter 'returnTo'
+      const returnTo = searchParams.get('returnTo');
+      // Chuyển hướng về trang trước đó nếu có, nếu không thì về trang sản phẩm hoặc trang chủ
+      router.push(returnTo || '/products');
     }
 
     setLoading(false);

@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import { SessionContextProvider } from '@supabase/auth-helpers-react';
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // Import TanStack Query
-import Notification from './notification';
+// import Notification from './notification'; // Đã xóa import Notification
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   const [supabaseClient] = useState(() => supabase);
@@ -26,7 +26,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         initialSession={undefined}
       >
         <CartProvider>
-          <Notification />
+          {/* <Notification /> // Đã xóa component Notification */}
           {children}
         </CartProvider>
       </SessionContextProvider>

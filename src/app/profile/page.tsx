@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
-import Link from "next/link";
+// import Link from "next/link";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 // Import the existing Navbar component
@@ -157,7 +157,7 @@ function ProfileContent() {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` },
-                (payload) => {
+                () => {
                     queryClient.invalidateQueries({ queryKey: ['userOrders', user.id] });
                 }
             )

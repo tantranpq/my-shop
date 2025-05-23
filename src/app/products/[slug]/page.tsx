@@ -33,7 +33,7 @@ export default function ProductDetail() {
     const [error, setError] = useState<string | null>(null);
     const [mainImageIndex, setMainImageIndex] = useState(0);
     const [startIndex, setStartIndex] = useState(0);
-    const visibleThumbnailsCount = 4;
+    const visibleThumbnailsCount = 3;
     const [showZoomModal, setShowZoomModal] = useState(false);
 
     // States for notification

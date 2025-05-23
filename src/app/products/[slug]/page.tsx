@@ -9,6 +9,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Product } from "@/types/product";
 import { useParams, useRouter } from 'next/navigation'; // Import useRouter
 
+// Define an interface for the raw data coming from Supabase
+// This helps TypeScript understand the structure of the 'data' object
+interface SupabaseProductData {
+    id: number;
+    name: string;
+    description: string;
+    price: number;
+    slug: string;
+    image: string;
+    // 'images' can be a JSON string, an array of strings, or null
+    images: string | string[] | null;
+    stock_quantity: number;
+}
+
 export default function ProductDetail() {
     const params = useParams();
     const { slug } = params;
@@ -65,49 +79,54 @@ export default function ProductDetail() {
                     return;
                 }
 
+                // Cast the raw data from Supabase to our defined interface
+                const rawProductData: SupabaseProductData = data as SupabaseProductData;
+
                 let parsedImages: string[] | null = null;
-                if (data.images) {
-                    if (Array.isArray(data.images)) {
-                        if (data.images.every((item: any) => typeof item === 'string')) {
-                            parsedImages = data.images as string[];
+                if (rawProductData.images) {
+                    if (Array.isArray(rawProductData.images)) {
+                        // Fix for line 71: Use a type predicate to inform TypeScript about the item type
+                        if (rawProductData.images.every((item): item is string => typeof item === 'string')) {
+                            parsedImages = rawProductData.images;
                         } else {
-                            console.warn("Cột 'images' trả về mảng nhưng chứa phần tử không phải chuỗi:", data.images);
+                            console.warn("Cột 'images' trả về mảng nhưng chứa phần tử không phải chuỗi:", rawProductData.images);
                             parsedImages = null;
                         }
-                    } else if (typeof data.images === 'string') {
-                        if (data.images.startsWith('[') && data.images.endsWith(']')) {
+                    } else if (typeof rawProductData.images === 'string') {
+                        if (rawProductData.images.startsWith('[') && rawProductData.images.endsWith(']')) {
                             try {
-                                const tempArray = JSON.parse(data.images);
-                                if (Array.isArray(tempArray) && tempArray.every((item: any) => typeof item === 'string')) {
+                                const tempArray = JSON.parse(rawProductData.images);
+                                // Fix for line 82: Use a type predicate here as well
+                                if (Array.isArray(tempArray) && tempArray.every((item): item is string => typeof item === 'string')) {
                                     parsedImages = tempArray;
                                 } else {
-                                    console.warn("Cột 'images' trả về chuỗi JSON không phải mảng chuỗi hợp lệ:", data.images);
+                                    console.warn("Cột 'images' trả về chuỗi JSON không phải mảng chuỗi hợp lệ:", rawProductData.images);
                                     parsedImages = null;
                                 }
                             } catch (e) {
-                                console.error("Lỗi khi parse chuỗi JSON từ cột 'images':", e, "Giá trị gây lỗi:", data.images);
+                                console.error("Lỗi khi parse chuỗi JSON từ cột 'images':", e, "Giá trị gây lỗi:", rawProductData.images);
                                 parsedImages = null;
                             }
-                        } else if (data.images.trim() !== '') {
-                            parsedImages = [data.images];
+                        } else if (rawProductData.images.trim() !== '') {
+                            parsedImages = [rawProductData.images];
                         } else {
                             parsedImages = null;
                         }
                     } else {
-                        console.warn("Cột 'images' trả về kiểu dữ liệu không mong muốn:", data.images, typeof data.images);
+                        console.warn("Cột 'images' trả về kiểu dữ liệu không mong muốn:", rawProductData.images, typeof rawProductData.images);
                         parsedImages = null;
                     }
                 }
 
                 const productData: Product = {
-                    id: data.id,
-                    name: data.name,
-                    description: data.description,
-                    price: data.price,
-                    slug: data.slug,
-                    image: data.image,
+                    id: rawProductData.id,
+                    name: rawProductData.name,
+                    description: rawProductData.description,
+                    price: rawProductData.price,
+                    slug: rawProductData.slug,
+                    image: rawProductData.image,
                     images: parsedImages,
-                    stock_quantity: data.stock_quantity,
+                    stock_quantity: rawProductData.stock_quantity,
                 };
 
                 setProduct(productData);

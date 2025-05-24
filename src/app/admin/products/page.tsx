@@ -5,10 +5,10 @@ import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-he
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronUp, X } from 'lucide-react'; // Đảm bảo import X
+import { ChevronDown, ChevronUp, X, Upload, Plus } from 'lucide-react'; 
 import Image from 'next/image';
 
-import { Product } from '@/types/product'; // Đảm bảo Product interface đã được cập nhật
+import { Product } from '@/types/product'; 
 
 
 // --- MultiSelect Component ---
@@ -111,9 +111,9 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onCh
 
 
 // --- Constants ---
-const PRODUCTS_BUCKET_NAME = 'product-images'; // Make sure this matches your Supabase bucket name
+const PRODUCTS_BUCKET_NAME = 'product-images'; 
 // URL ảnh mặc định cho product.image nếu không có ảnh nào được upload/chọn
-const DEFAULT_PRODUCT_IMAGE_PLACEHOLDER = '/404-error.png'; // <-- CẬP NHẬT ĐƯỜNG DẪN NÀY ĐẾN ẢNH PLACEHOLDER CỦA BẠN
+const DEFAULT_PRODUCT_IMAGE_PLACEHOLDER = '/not-found.png'; 
 
 
 // Helper to generate a unique file path for Supabase Storage
@@ -132,23 +132,23 @@ export default function AdminProductsPage() {
 
     // State quản lý UI/Error
     const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
-    const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
-    const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
-    const [isSubmitting, setIsSubmitting] = useState(false); // Trạng thái gửi form
+    const [isFormOpen, setIsFormOpen] = useState(false); 
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null); 
+    const [isSubmitting, setIsSubmitting] = useState(false); 
 
     // States cho Image Upload (UPDATED for image and images)
-    const [newImageFile, setNewImageFile] = useState<File | null>(null); // File mới cho cột 'image' (ảnh bìa)
-    const [existingImageProductUrl, setExistingImageProductUrl] = useState<string | null>(null); // URL của ảnh bìa hiện tại
+    const [newImageFile, setNewImageFile] = useState<File | null>(null); 
+    const [existingImageProductUrl, setExistingImageProductUrl] = useState<string | null>(null); 
 
-    const [newGalleryImageFiles, setNewGalleryImageFiles] = useState<File[]>([]); // Các file mới cho cột 'images' (bộ sưu tập)
-    const [existingGalleryImageUrls, setExistingGalleryImageUrls] = useState<string[]>([]); // Các URL ảnh bộ sưu tập đã có
-    const [imagesToDeleteFromGallery, setImagesToDeleteFromGallery] = useState<string[]>([]); // Các URL ảnh bộ sưu tập đánh dấu để xóa
+    const [newGalleryImageFiles, setNewGalleryImageFiles] = useState<File[]>([]); 
+    const [existingGalleryImageUrls, setExistingGalleryImageUrls] = useState<string[]>([]); 
+    const [imagesToDeleteFromGallery, setImagesToDeleteFromGallery] = useState<string[]>([]); 
 
-    const [uploadingImagesStatus, setUploadingImagesStatus] = useState<string | null>(null); // To show upload progress message
+    const [uploadingImagesStatus, setUploadingImagesStatus] = useState<string | null>(null); 
 
     // States cho Phân trang
-    const [currentPage, setCurrentPage] = useState(0); // Trang hiện tại (0-indexed)
-    const itemsPerPage = 10; // Số sản phẩm trên mỗi trang
+    const [currentPage, setCurrentPage] = useState(0); 
+    const itemsPerPage = 10; 
     const offset = currentPage * itemsPerPage;
     const limit = itemsPerPage;
 
@@ -239,7 +239,7 @@ export default function AdminProductsPage() {
                 .range(offset, offset + limit - 1);
 
             if (error) throw error;
-
+            
             // Ensure `images` is always an array and `image` is always a string
             const productsWithTypeGuards = data ? data.map(p => ({
                 ...p,
@@ -293,12 +293,12 @@ export default function AdminProductsPage() {
     // --- Hàm mở form chỉnh sửa ---
     const openEditForm = useCallback((product: Product) => {
         setEditingProduct(product);
-        setNewImageFile(null); // Reset new file for main image
-        setExistingImageProductUrl(product.image); // Set existing main image URL
+        setNewImageFile(null); 
+        setExistingImageProductUrl(product.image); 
 
-        setNewGalleryImageFiles([]); // Reset new gallery files
-        setExistingGalleryImageUrls(product.images || []); // Set existing gallery URLs
-        setImagesToDeleteFromGallery([]); // Reset deletions
+        setNewGalleryImageFiles([]); 
+        setExistingGalleryImageUrls(product.images || []); 
+        setImagesToDeleteFromGallery([]); 
         setIsFormOpen(true);
     }, []);
 
@@ -307,7 +307,7 @@ export default function AdminProductsPage() {
         setIsFormOpen(false);
         setEditingProduct(null);
         setNewImageFile(null);
-        setExistingImageProductUrl(null); // Reset
+        setExistingImageProductUrl(null); 
         setNewGalleryImageFiles([]);
         setExistingGalleryImageUrls([]);
         setImagesToDeleteFromGallery([]);
@@ -386,14 +386,14 @@ export default function AdminProductsPage() {
                 slug: formData.get('slug') as string,
             };
 
-            let finalImageUrl = existingImageProductUrl; // For the main 'image' column
-            let finalGalleryImageUrls: string[] = [...existingGalleryImageUrls]; // For the 'images' array column
+            let finalImageUrl = existingImageProductUrl; 
+            let finalGalleryImageUrls: string[] = [...existingGalleryImageUrls]; 
 
 
             // 1. Handle Main Image Upload (product.image)
             if (newImageFile) {
                 setUploadingImagesStatus('Đang tải ảnh bìa...');
-                const url = await uploadFile(newImageFile, 'covers'); // Assuming 'covers' is the folder for main images
+                const url = await uploadFile(newImageFile, 'covers'); 
                 if (url) {
                     finalImageUrl = url;
                     // Delete old main image if it was replaced and it's not the default placeholder
@@ -407,7 +407,7 @@ export default function AdminProductsPage() {
                 // If user cleared existing main image without selecting new one, and there was an original
                 // In this case, we revert to a default placeholder.
                 finalImageUrl = DEFAULT_PRODUCT_IMAGE_PLACEHOLDER;
-                await deleteFileFromStorage(editingProduct.image); // Delete original if it's not the placeholder
+                await deleteFileFromStorage(editingProduct.image); 
             } else if (!finalImageUrl) {
                 // If no new file and no existing URL (e.g., creating a new product without selecting image)
                 finalImageUrl = DEFAULT_PRODUCT_IMAGE_PLACEHOLDER;
@@ -432,7 +432,7 @@ export default function AdminProductsPage() {
                 for (let i = 0; i < newGalleryImageFiles.length; i++) {
                     const file = newGalleryImageFiles[i];
                     setUploadingImagesStatus(`Đang tải ảnh ${i + 1}/${newGalleryImageFiles.length} của bộ sưu tập...`);
-                    const url = await uploadFile(file, 'gallery'); // Assuming 'gallery' is the folder for gallery images
+                    const url = await uploadFile(file, 'gallery'); 
                     if (url) {
                         newUrls.push(url);
                     } else {
@@ -443,8 +443,8 @@ export default function AdminProductsPage() {
             }
 
             // Update productData with final image URLs
-            productData.image = finalImageUrl; // Assign the non-null string
-            productData.images = finalGalleryImageUrls; // Assign the array of strings
+            productData.image = finalImageUrl; 
+            productData.images = finalGalleryImageUrls; 
 
             setUploadingImagesStatus('Đang lưu thông tin sản phẩm...');
 
@@ -467,19 +467,13 @@ export default function AdminProductsPage() {
                 toast.success(editingProduct ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!');
                 queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
                 queryClient.invalidateQueries({ queryKey: ['allCategories'] });
-                closeForm(); // Close and reset form
+                closeForm(); 
             }
 
-        } catch (err: unknown) {
-            if (err instanceof Error) {
-                console.error('Lỗi trong quá trình lưu sản phẩm:', err);
-                toast.error(err.message || 'Đã xảy ra lỗi không xác định.');
-            } else {
-                console.error('Lỗi không xác định:', err);
-                toast.error('Đã xảy ra lỗi không xác định.');
-            }
+        } catch (err: any) {
+            console.error('Lỗi trong quá trình lưu sản phẩm:', err);
+            toast.error(err.message || 'Đã xảy ra lỗi không xác định.');
         } finally {
-
             setIsSubmitting(false);
             setUploadingImagesStatus(null);
         }
@@ -496,7 +490,7 @@ export default function AdminProductsPage() {
         // Lấy thông tin sản phẩm để xóa ảnh khỏi Storage
         const { data: productToDelete, error: fetchError } = await supabaseClient
             .from('products')
-            .select('image, images') // Select both image fields
+            .select('image, images') 
             .eq('id', productId)
             .single();
 
@@ -569,7 +563,7 @@ export default function AdminProductsPage() {
                 />
                 {/* Nút thêm sản phẩm mới */}
                 <button
-                    onClick={() => { closeForm(); setIsFormOpen(true); }} // Use closeForm to reset states
+                    onClick={() => { closeForm(); setIsFormOpen(true); }} 
                     className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
                 >
                     Thêm Sản phẩm mới
@@ -696,7 +690,7 @@ export default function AdminProductsPage() {
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setExistingImageProductUrl(null); // Mark for removal (will be handled in save logic)
+                                                setExistingImageProductUrl(null); 
                                             }}
                                             className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
                                             aria-label="Xóa ảnh bìa"
@@ -749,7 +743,7 @@ export default function AdminProductsPage() {
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            setImagesToDeleteFromGallery(prev => [...prev, url]); // Mark for deletion
+                                                            setImagesToDeleteFromGallery(prev => [...prev, url]); 
                                                         }}
                                                         className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
                                                         aria-label="Xóa ảnh gallery"
@@ -816,7 +810,7 @@ export default function AdminProductsPage() {
                                 <button
                                     type="submit"
                                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                                    disabled={isSubmitting || !!uploadingImagesStatus} // Disable if any image task is ongoing
+                                    disabled={isSubmitting || !!uploadingImagesStatus} 
                                 >
                                     {isSubmitting ? 'Đang lưu...' : (uploadingImagesStatus || (editingProduct ? 'Cập Nhật Sản Phẩm' : 'Thêm Sản Phẩm'))}
                                 </button>
@@ -865,11 +859,16 @@ export default function AdminProductsPage() {
                                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.slug ?? 'N/A'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.stock_quantity}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category ?? 'N/A'}</td>
+                                    {/* Category Column - Applied IIFE for robust type inference */}
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {(() => {
+                                            const categoryValue = product.category ?? 'N/A';
+                                            return categoryValue;
+                                        })()}
+                                    </td>
                                     {/* Main Image Column - Applied IIFE for robust type inference */}
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                         {(() => {
-                                            // product.image is guaranteed to be a string or DEFAULT_PRODUCT_IMAGE_PLACEHOLDER from useQuery
                                             if (product.image && typeof product.image === 'string' && product.image !== DEFAULT_PRODUCT_IMAGE_PLACEHOLDER) {
                                                 return <Image src={product.image} alt={product.name} width={40} height={40} objectFit="cover" className="rounded" />;
                                             }
@@ -934,8 +933,9 @@ export default function AdminProductsPage() {
                             <li key={index}>
                                 <button
                                     onClick={() => setCurrentPage(index)}
-                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
-                                        }`}
+                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${
+                                        currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
+                                    }`}
                                 >
                                     {index + 1}
                                 </button>

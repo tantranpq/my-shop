@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import React, { useState, useEffect, useCallback } from 'react';
 import { Product } from "@/types/product"; // Ensure this import is correct
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner'; // Import toast for notifications
 
 // Define an interface for the raw data coming from Supabase
 // This helps TypeScript understand the structure of the 'data' object
@@ -20,6 +21,7 @@ interface SupabaseProductData {
     image: string;
     images: string | string[] | null; // Can be JSON string, array, or null
     stock_quantity: number;
+    // Add other fields if necessary
 }
 
 export default function ProductDetail() {
@@ -35,147 +37,178 @@ export default function ProductDetail() {
     const visibleThumbnailsCount = 3;
     const [showZoomModal, setShowZoomModal] = useState(false);
 
-    // States for notification
-    const [notificationMessage, setNotificationMessage] = useState<string>('');
-    const [showNotification, setShowNotification] = useState<boolean>(false);
+    // Thông báo toast sẽ được quản lý bởi `sonner` trực tiếp, không cần state `notificationMessage` và `showNotification` nữa
+    // const [notificationMessage, setNotificationMessage] = useState<string>('');
+    // const [showNotification, setShowNotification] = useState<boolean>(false);
 
-    // Function to show notification
-    const triggerNotification = useCallback((message: string) => {
-        setNotificationMessage(message);
-        setShowNotification(true);
-        const timer = setTimeout(() => {
-            setShowNotification(false);
-            setNotificationMessage('');
-        }, 3000); // Notification disappears after 3 seconds
-        return () => clearTimeout(timer); // Cleanup on unmount or re-render
-    }, []);
+    // Function to show notification - will use toast from sonner
+    // const triggerNotification = useCallback((message: string) => {
+    //     setNotificationMessage(message);
+    //     setShowNotification(true);
+    //     const timer = setTimeout(() => {
+    //         setShowNotification(false);
+    //         setNotificationMessage('');
+    //     }, 3000); // Notification disappears after 3 seconds
+    //     return () => clearTimeout(timer); // Cleanup on unmount or re-render
+    // }, []);
 
-    useEffect(() => {
-        const fetchProduct = async () => {
-            if (!slug) {
+    const fetchProduct = useCallback(async () => {
+        if (!slug) {
+            setLoading(false);
+            setError("Không tìm thấy slug sản phẩm.");
+            return null; // Return null if slug is missing
+        }
+
+        try {
+            setLoading(true);
+            const { data, error: fetchError } = await supabase
+                .from("products")
+                .select("*")
+                .eq("slug", slug)
+                .single();
+
+            if (fetchError) {
+                if (fetchError.code === 'PGRST116') { // Error code for 'no rows found'
+                    setError("Sản phẩm không tồn tại hoặc đã bị xóa.");
+                } else {
+                    setError("Không thể tải sản phẩm.");
+                }
+                setProduct(null); // Set product to null if not found
                 setLoading(false);
-                setError("Không tìm thấy slug sản phẩm.");
-                return;
+                return null;
             }
 
-            try {
-                setLoading(true);
-                const { data, error: fetchError } = await supabase
-                    .from("products")
-                    .select("*")
-                    .eq("slug", slug)
-                    .single();
+            if (!data) {
+                setError("Không tìm thấy sản phẩm.");
+                setProduct(null);
+                setLoading(false);
+                return null;
+            }
 
-                if (fetchError) {
-                    setError("Không thể tải sản phẩm.");
-                    setLoading(false);
-                    return;
-                }
+            const rawProductData: SupabaseProductData = data as SupabaseProductData;
 
-                if (!data) {
-                    setError("Không tìm thấy sản phẩm.");
-                    setLoading(false);
-                    return;
-                }
-
-                // Cast the raw data from Supabase to our defined interface
-                const rawProductData: SupabaseProductData = data as SupabaseProductData;
-
-                let parsedImages: string[] | null = null;
-                if (rawProductData.images) {
-                    if (Array.isArray(rawProductData.images)) {
-                        // Type predicate to ensure all items are strings
-                        if (rawProductData.images.every((item): item is string => typeof item === 'string')) {
-                            parsedImages = rawProductData.images;
-                        } else {
-                            console.warn("Cột 'images' trả về mảng nhưng chứa phần tử không phải chuỗi:", rawProductData.images);
-                            parsedImages = null;
-                        }
-                    } else if (typeof rawProductData.images === 'string') {
-                        if (rawProductData.images.startsWith('[') && rawProductData.images.endsWith(']')) {
-                            try {
-                                const tempArray = JSON.parse(rawProductData.images);
-                                // Type predicate to ensure all items are strings
-                                if (Array.isArray(tempArray) && tempArray.every((item): item is string => typeof item === 'string')) {
-                                    parsedImages = tempArray;
-                                } else {
-                                    console.warn("Cột 'images' trả về chuỗi JSON không phải mảng chuỗi hợp lệ:", rawProductData.images);
-                                    parsedImages = null;
-                                }
-                            } catch (e) {
-                                console.error("Lỗi khi parse chuỗi JSON từ cột 'images':", e, "Giá trị gây lỗi:", rawProductData.images);
-                                parsedImages = null;
-                            }
-                        } else if (rawProductData.images.trim() !== '') {
-                            parsedImages = [rawProductData.images]; // Treat a single non-empty string as an array with one element
-                        } else {
-                            parsedImages = null;
-                        }
+            let parsedImages: string[] | null = null;
+            if (rawProductData.images) {
+                if (Array.isArray(rawProductData.images)) {
+                    if (rawProductData.images.every((item): item is string => typeof item === 'string')) {
+                        parsedImages = rawProductData.images;
                     } else {
-                        console.warn("Cột 'images' trả về kiểu dữ liệu không mong muốn:", rawProductData.images, typeof rawProductData.images);
+                        console.warn("Cột 'images' trả về mảng nhưng chứa phần tử không phải chuỗi:", rawProductData.images);
                         parsedImages = null;
                     }
-                }
-
-                const productData: Product = {
-                    id: String(rawProductData.id), // Ensure ID is treated as a string
-                    name: rawProductData.name,
-                    description: rawProductData.description,
-                    price: rawProductData.price,
-                    slug: rawProductData.slug,
-                    image: rawProductData.image,
-                    images: parsedImages,
-                    stock_quantity: rawProductData.stock_quantity,
-                };
-
-                setProduct(productData);
-
-                // Set initial main image based on availability
-                if (productData.images && productData.images.length > 0) {
-                    setMainImageIndex(0);
-                } else if (productData.image) {
-                    setMainImageIndex(-1); // Indicates using the single 'image' field
+                } else if (typeof rawProductData.images === 'string') {
+                    if (rawProductData.images.startsWith('[') && rawProductData.images.endsWith(']')) {
+                        try {
+                            const tempArray = JSON.parse(rawProductData.images);
+                            if (Array.isArray(tempArray) && tempArray.every((item): item is string => typeof item === 'string')) {
+                                parsedImages = tempArray;
+                            } else {
+                                console.warn("Cột 'images' trả về chuỗi JSON không phải mảng chuỗi hợp lệ:", rawProductData.images);
+                                parsedImages = null;
+                            }
+                        } catch (e) {
+                            console.error("Lỗi khi parse chuỗi JSON từ cột 'images':", e, "Giá trị gây lỗi:", rawProductData.images);
+                            parsedImages = null;
+                        }
+                    } else if (rawProductData.images.trim() !== '') {
+                        parsedImages = [rawProductData.images];
+                    } else {
+                        parsedImages = null;
+                    }
                 } else {
-                    setMainImageIndex(-1); // No images available
+                    console.warn("Cột 'images' trả về kiểu dữ liệu không mong muốn:", rawProductData.images, typeof rawProductData.images);
+                    parsedImages = null;
                 }
-                setLoading(false);
-            } catch (err: unknown) {
-                let errorMessage = "Có lỗi xảy ra.";
-                if (err instanceof Error) {
-                    errorMessage = err.message;
-                }
-                setError(errorMessage);
-                setLoading(false);
             }
-        };
 
-        fetchProduct();
+            const productData: Product = {
+                id: String(rawProductData.id),
+                name: rawProductData.name,
+                description: rawProductData.description,
+                price: rawProductData.price,
+                slug: rawProductData.slug,
+                image: rawProductData.image,
+                images: parsedImages,
+                stock_quantity: rawProductData.stock_quantity,
+                // Add other fields from your Product interface here
+            };
+
+            setProduct(productData);
+            setError(null); // Clear any previous errors
+
+            if (productData.images && productData.images.length > 0) {
+                setMainImageIndex(0);
+            } else if (productData.image) {
+                setMainImageIndex(-1);
+            } else {
+                setMainImageIndex(-1);
+            }
+            setLoading(false);
+            return productData; // Return the fetched product data
+        } catch (err: unknown) {
+            let errorMessage = "Có lỗi xảy ra.";
+            if (err instanceof Error) {
+                errorMessage = err.message;
+            }
+            setError(errorMessage);
+            setProduct(null);
+            setLoading(false);
+            return null;
+        }
     }, [slug]);
+
+
+    useEffect(() => {
+        fetchProduct(); // Fetch initial product data
+
+        // Set up Realtime subscription
+        if (slug) {
+            const channel = supabase
+                .channel(`product_${slug}_changes`) // Unique channel for this product's slug
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'products', filter: `slug=eq.${slug}` },
+                    (payload) => {
+                        console.log('Realtime change for product:', slug, payload);
+                        if (payload.eventType === 'UPDATE') {
+                            // Re-fetch the product to get the latest data
+                            fetchProduct();
+                            toast.info("Thông tin sản phẩm đã được cập nhật.");
+                        } else if (payload.eventType === 'DELETE') {
+                            // If the product is deleted, clear product state and show error
+                            setProduct(null);
+                            setError("Sản phẩm này đã bị xóa.");
+                            setLoading(false);
+                            toast.error("Sản phẩm này không còn tồn tại!");
+                        }
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel); // Clean up subscription on unmount
+            };
+        }
+    }, [slug, fetchProduct]); // Re-subscribe if slug or fetchProduct callback changes
 
     const handlePrevClick = () => {
         if (!product || !product.images || product.images.length === 0) return;
 
-        // Decrease mainImageIndex, ensuring it doesn't go below 0
         setMainImageIndex(prevIndex => Math.max(0, prevIndex - 1));
-        // Adjust startIndex for thumbnails to keep the current main image visible
         setStartIndex(prevIndex => Math.max(0, prevIndex - 1));
     };
 
     const handleNextClick = () => {
         if (!product || !product.images || product.images.length === 0) return;
 
-        // Increase mainImageIndex, ensuring it doesn't exceed the array length
         setMainImageIndex(prevIndex => Math.min(product.images!.length - 1, prevIndex + 1));
-        // Adjust startIndex for thumbnails to keep the current main image visible
         setStartIndex(prevIndex => Math.min(product.images!.length - visibleThumbnailsCount, prevIndex + 1));
     };
 
-    // Function to close the zoom modal
     const closeZoomModal = useCallback(() => {
         setShowZoomModal(false);
     }, []);
 
-    // Effect to handle Escape key press for closing the modal
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
@@ -195,15 +228,18 @@ export default function ProductDetail() {
     }, [showZoomModal, closeZoomModal]);
 
 
-    const fallbackImageUrl = 'https://placehold.co/600x400/cccccc/333333?text=No+Image';
+    const fallbackImageUrl = '/not-found.png'; // Use a local placeholder image
 
-    // handleBuyNow function
+
     const handleBuyNow = (productToBuy: Product) => {
-        if (!productToBuy.slug) {
-            triggerNotification('Không thể mua ngay sản phẩm này (thiếu slug).');
+        if (productToBuy.stock_quantity <= 0) {
+            toast.error('Sản phẩm này đã hết hàng. Không thể mua ngay!');
             return;
         }
-        // Redirect to checkout page with a single item
+        if (!productToBuy.slug) {
+            toast.error('Không thể mua ngay sản phẩm này (thiếu slug).');
+            return;
+        }
         router.push(`/checkout?items=${productToBuy.slug}:1`);
     };
 
@@ -244,12 +280,12 @@ export default function ProductDetail() {
         );
     }
 
-    if (!product) {
+    if (!product) { // This will now also handle cases where a product was deleted via realtime
         return (
             <>
                 <Navbar />
                 <main className="p-6 text-center">
-                    <p className="text-gray-700 text-xl font-semibold mb-4">Không tìm thấy sản phẩm.</p>
+                    <p className="text-gray-700 text-xl font-semibold mb-4">Sản phẩm không tồn tại hoặc đã bị xóa.</p>
                     <Link href="/products" className="text-blue-600 hover:underline text-lg">
                         ← Quay lại danh sách sản phẩm
                     </Link>
@@ -339,7 +375,7 @@ export default function ProductDetail() {
                                 ) : product.stock_quantity < 10 ? (
                                     `${product.stock_quantity} sản phẩm còn lại`
                                 ) : (
-                                    'còn hàng'
+                                    'Còn hàng'
                                 )}
                             </span>
                         </div>
@@ -352,7 +388,9 @@ export default function ProductDetail() {
                                 onClick={() => {
                                     if (product.stock_quantity > 0) {
                                         addToCart(product);
-                                        triggerNotification(`Đã thêm "${product.name}" vào giỏ hàng!`);
+                                        toast.success(`Đã thêm "${product.name}" vào giỏ hàng!`);
+                                    } else {
+                                        toast.error("Sản phẩm đã hết hàng. Không thể thêm vào giỏ hàng.");
                                     }
                                 }}
                                 disabled={product.stock_quantity === 0}
@@ -409,12 +447,13 @@ export default function ProductDetail() {
                 </div>
             )}
 
-            {/* Notification Component */}
-            {showNotification && (
+            {/* Sonner toast container (assuming you have this in your root layout or similar) */}
+            {/* No need for a custom notification component anymore if using Sonner */}
+            {/* {showNotification && (
                 <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg z-50 animate-fade-in-out">
                     <p className="text-base font-medium">{notificationMessage}</p>
                 </div>
-            )}
+            )} */}
         </>
     );
 }

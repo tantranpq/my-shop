@@ -5,7 +5,7 @@ import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-he
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronUp, X, Upload, Plus } from 'lucide-react'; // Đảm bảo import X
+import { ChevronDown, ChevronUp, X } from 'lucide-react'; // Đảm bảo import X
 import Image from 'next/image';
 
 import { Product } from '@/types/product'; // Đảm bảo Product interface đã được cập nhật
@@ -239,7 +239,7 @@ export default function AdminProductsPage() {
                 .range(offset, offset + limit - 1);
 
             if (error) throw error;
-            
+
             // Ensure `images` is always an array and `image` is always a string
             const productsWithTypeGuards = data ? data.map(p => ({
                 ...p,
@@ -470,10 +470,16 @@ export default function AdminProductsPage() {
                 closeForm(); // Close and reset form
             }
 
-        } catch (err: any) {
-            console.error('Lỗi trong quá trình lưu sản phẩm:', err);
-            toast.error(err.message || 'Đã xảy ra lỗi không xác định.');
+        } catch (err: unknown) {
+            if (err instanceof Error) {
+                console.error('Lỗi trong quá trình lưu sản phẩm:', err);
+                toast.error(err.message || 'Đã xảy ra lỗi không xác định.');
+            } else {
+                console.error('Lỗi không xác định:', err);
+                toast.error('Đã xảy ra lỗi không xác định.');
+            }
         } finally {
+
             setIsSubmitting(false);
             setUploadingImagesStatus(null);
         }
@@ -928,9 +934,8 @@ export default function AdminProductsPage() {
                             <li key={index}>
                                 <button
                                     onClick={() => setCurrentPage(index)}
-                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${
-                                        currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
-                                    }`}
+                                    className={`flex items-center justify-center px-4 h-10 leading-tight border border-gray-300 hover:bg-gray-100 hover:text-gray-700 ${currentPage === index ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 bg-white'
+                                        }`}
                                 >
                                     {index + 1}
                                 </button>

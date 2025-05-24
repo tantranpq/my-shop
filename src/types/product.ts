@@ -1,7 +1,7 @@
 // types/product.ts
 // Định nghĩa interface cho đối tượng Product
 export interface Product {
-  id: number; // ID sản phẩm, kiểu number theo Supabase
+  id: string; // ID sản phẩm, kiểu number theo Supabase
   slug: string; // Slug duy nhất của sản phẩm
   image: string; // URL hình ảnh chính của sản phẩm, CÓ THỂ LÀ NULL
   name: string; // Tên sản phẩm

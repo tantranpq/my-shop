@@ -17,7 +17,7 @@ export default function CollectionPage() {
     const { addToCart } = useCart();
     const queryClient = useQueryClient();
     const router = useRouter(); // Initialize useRouter
-const pathname = usePathname();
+    const pathname = usePathname();
     const [error] = useState<string | null>(null);
 
     // Sử dụng useQuery để fetch sản phẩm yêu thích
@@ -110,7 +110,7 @@ const pathname = usePathname();
         console.log(`Đã nhấn "Mua ngay" cho sản phẩm ${product.name}. Chuyển hướng đến trang thanh toán với số lượng 1.`);
         // Chuyển hướng đến trang thanh toán, truyền slug của sản phẩm và số lượng 1
         // Định dạng chuỗi truy vấn phải là "slug:quantity"
-        router.push(`/checkout?items=${product.slug}:1`); 
+        router.push(`/checkout?items=${product.slug}:1`);
     };
 
     if (loading) {
@@ -174,6 +174,21 @@ const pathname = usePathname();
                                         className="w-full h-48 object-cover"
                                     />
                                 </Link>
+                                <span className={`absolute top-2 left-2 text-white text-xs font-bold rounded-full px-2 py-1 flex items-center justify-center min-w-[50px] h-[24px] z-10 ${product.stock_quantity <= 0
+                                    ? 'bg-red-600' // Hết hàng: nền đỏ
+                                    : product.stock_quantity < 10
+                                        ? 'bg-yellow-500' // Còn ít (<10): nền vàng cam (hoặc bạn có thể dùng 'bg-red-500' nếu muốn cảnh báo mạnh hơn)
+                                        : 'bg-green-600' // Còn hàng (>=10): nền xanh lá
+                                    }`
+                                }>
+                                    {product.stock_quantity <= 0 ? (
+                                        'Hết hàng'
+                                    ) : product.stock_quantity < 10 ? (
+                                        `còn ${product.stock_quantity} SP` // Rút gọn "sản phẩm còn lại" thành "SP" để vừa badge nhỏ
+                                    ) : (
+                                        'Còn hàng'
+                                    )}
+                                </span>
                                 <div className="p-5 flex-grow flex flex-col">
                                     <h3 className="text-xl font-bold mb-2">
                                         <Link href={`/products/${product.slug}`} className="text-gray-900 hover:text-blue-600 transition-colors">

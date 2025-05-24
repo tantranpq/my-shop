@@ -11,7 +11,7 @@ import {
 } from "react";
 
 type Product = {
-  id: number;
+  id: string;
   name: string;
   price: number;
   image: string;

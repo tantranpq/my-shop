@@ -1,19 +1,17 @@
 "use client";
 
 import '@/app/globals.css';
-// import Navbar from "@/components/Navbar"; // Đảm bảo import Navbar - Removed as it's likely part of a layout
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import React, { useState, useMemo, useCallback } from 'react'; // Đã thêm useCallback
-import { Product } from "@/types/product"; // Đã bỏ comment để import Product từ file chung
-import { useSearchParams, useRouter } from 'next/navigation'; // Đã thêm useRouter
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Heart } from 'lucide-react'; // Import icons for collapse/expand and navigation, and Heart icon
-import { useUser } from '@supabase/auth-helpers-react'; // Import useUser hook
+import React, { useState, useMemo, useCallback } from 'react';
+import { Product } from "@/types/product"; // Product import đúng
+import { useSearchParams, useRouter } from 'next/navigation';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
+import { useUser } from '@supabase/auth-helpers-react';
 
-// Định nghĩa interface Product đã được di chuyển đến file "@/types/product"
-// QUAN TRỌNG: Đảm bảo rằng 'id' của sản phẩm trong bảng 'products' của bạn là kiểu INT8 (number)
-// và 'product_id' trong bảng 'user_favorites' cũng là kiểu INT8 (number).
+// QUAN TRỌNG: Đảm bảo rằng 'id' của sản phẩm trong bảng 'products' của bạn là kiểu UUID (string)
+// và 'product_id' trong bảng 'user_favorites' cũng là kiểu UUID (string).
 // Đồng thời, đảm bảo 'image' trong Product interface là 'string | null' trong file "@/types/product".
 
 async function getProducts(searchTerm: string | null): Promise<Product[]> {
@@ -32,30 +30,27 @@ async function getProducts(searchTerm: string | null): Promise<Product[]> {
 export default function ProductPageClient() {
     const { addToCart } = useCart();
     const searchParams = useSearchParams();
-    const router = useRouter(); // Khởi tạo useRouter
+    const router = useRouter();
     const searchTerm = searchParams.get("search");
-    const user = useUser(); // Lấy thông tin người dùng hiện tại
+    const user = useUser();
 
     const [products, setProducts] = React.useState<Product[]>([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
-    // State để quản lý các danh mục đang bị thu gọn
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-    // State để quản lý trang hiện tại cho mỗi danh mục (cho chức năng slide)
     const [categorySlidePages, setCategorySlidePages] = useState<Map<string, number>>(new Map());
     // State để lưu trữ ID của các sản phẩm yêu thích của người dùng hiện tại
-    // Set này sẽ lưu trữ number thay vì string
-    const [favoriteProductIds, setFavoriteProductIds] = useState<Set<number>>(new Set());
-    // State để quản lý thông báo tùy chỉnh - ĐÃ PHỤC HỒI
+    // Set này sẽ lưu trữ string (UUID)
+    const [favoriteProductIds, setFavoriteProductIds] = useState<Set<string>>(new Set());
     const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
 
 
-    const itemsPerSlide = 8; // 2 hàng x 4 cột = 8 sản phẩm mỗi slide (Đã điều chỉnh)
+    const itemsPerSlide = 8;
 
     React.useEffect(() => {
         async function fetchProducts() {
             try {
-                setLoading(true); // Đặt loading về true khi bắt đầu fetch
+                setLoading(true);
                 const data = await getProducts(searchTerm);
                 setProducts(data);
                 setError(null);
@@ -83,66 +78,61 @@ export default function ProductPageClient() {
 
             if (error) {
                 console.error('Lỗi khi tải sản phẩm yêu thích:', error);
-                // Có thể hiển thị thông báo lỗi khi tải yêu thích nếu cần
                 return;
             }
-            // Đảm bảo product_id được thêm vào Set dưới dạng number
-            const favIds = new Set(data.map(item => item.product_id as number));
+            // Đảm bảo product_id được thêm vào Set dưới dạng string (UUID)
+            const favIds = new Set(data.map(item => item.product_id)); // Bỏ 'as string' vì TypeScript đã biết product_id là string nếu bảng đúng
             setFavoriteProductIds(favIds);
         } else {
-            setFavoriteProductIds(new Set()); // Xóa yêu thích nếu không có người dùng đăng nhập
+            setFavoriteProductIds(new Set());
         }
-    }, [user, supabase]); // Thêm supabase vào dependencies vì nó được sử dụng bên trong
+    }, [user]); // Bỏ 'supabase' khỏi dependencies vì nó là một đối tượng tĩnh từ lib, không cần thiết để thêm vào đây
 
     // Effect để tải các sản phẩm yêu thích lần đầu và khi người dùng thay đổi
     React.useEffect(() => {
         fetchFavorites();
-    }, [fetchFavorites]); // Depend on fetchFavorites
+    }, [fetchFavorites]);
 
-    // Effect để tự động ẩn thông báo sau 2 giây - ĐÃ PHỤC HỒI
+    // Effect để tự động ẩn thông báo sau 2 giây
     React.useEffect(() => {
         if (message) {
             const timer = setTimeout(() => {
                 setMessage(null);
-            }, 2000); // Ẩn sau 2 giây
-            return () => clearTimeout(timer); // Xóa timer nếu component unmount hoặc message thay đổi
+            }, 2000);
+            return () => clearTimeout(timer);
         }
     }, [message]);
 
 
     const handleAddToCart = (product: Product) => {
         addToCart(product);
-        setMessage({ type: 'success', text: `Đã thêm ${product.name} vào giỏ hàng.` }); // ĐÃ PHỤC HỒI
+        setMessage({ type: 'success', text: `Đã thêm ${product.name} vào giỏ hàng.` });
     };
 
     // Hàm xử lý khi nhấn nút "Mua ngay"
     const handleBuyNow = (product: Product) => {
         if (!product.slug) {
-            setMessage({ type: 'error', text: 'Không thể mua ngay sản phẩm này (thiếu slug).' }); // ĐÃ PHỤC HỒI
+            setMessage({ type: 'error', text: 'Không thể mua ngay sản phẩm này (thiếu slug).' });
             return;
         }
-        // Chuyển hướng đến trang thanh toán với sản phẩm đơn lẻ
-        // Định dạng URL: /checkout?items=product_slug:1
         router.push(`/checkout?items=${product.slug}:1`);
     };
 
     // Hàm để chuyển đổi trạng thái yêu thích của một sản phẩm
     const handleToggleFavorite = async (product: Product) => {
         if (!user) {
-            setMessage({ type: 'info', text: 'Vui lòng đăng nhập để thêm sản phẩm vào danh sách yêu thích.' }); // ĐÃ PHỤC HỒI
+            setMessage({ type: 'info', text: 'Vui lòng đăng nhập để thêm sản phẩm vào danh sách yêu thích.' });
             return;
         }
 
         const isFavorited = favoriteProductIds.has(product.id);
-        const newFavorites = new Set(favoriteProductIds); // Tạo một bản sao của Set hiện tại
+        const newFavorites = new Set(favoriteProductIds);
 
         if (isFavorited) {
-            // Cập nhật UI lạc quan: Xóa khỏi Set trước khi gọi API
             newFavorites.delete(product.id);
             setFavoriteProductIds(newFavorites);
-            setMessage({ type: 'success', text: `Đã xóa "${product.name}" khỏi danh sách yêu thích.` }); // ĐÃ PHỤC HỒI
+            setMessage({ type: 'success', text: `Đã xóa "${product.name}" khỏi danh sách yêu thích.` });
 
-            // Gọi API để xóa khỏi yêu thích
             const { error } = await supabase
                 .from('user_favorites')
                 .delete()
@@ -151,24 +141,22 @@ export default function ProductPageClient() {
 
             if (error) {
                 console.error('Lỗi khi xóa sản phẩm yêu thích:', error);
-                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi xóa sản phẩm yêu thích.' }); // ĐÃ PHỤC HỒI
+                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi xóa sản phẩm yêu thích.' });
                 // Hoàn tác cập nhật UI nếu có lỗi
                 setFavoriteProductIds(prev => new Set(prev).add(product.id));
             }
         } else {
-            // Cập nhật UI lạc quan: Thêm vào Set trước khi gọi API
             newFavorites.add(product.id);
             setFavoriteProductIds(newFavorites);
-            setMessage({ type: 'success', text: `Đã thêm "${product.name}" vào danh sách yêu thích.` }); // ĐÃ PHỤC HỒI
+            setMessage({ type: 'success', text: `Đã thêm "${product.name}" vào danh sách yêu thích.` });
 
-            // Gọi API để thêm vào yêu thích
             const { error } = await supabase
                 .from('user_favorites')
                 .insert({ user_id: user.id, product_id: product.id });
 
             if (error) {
                 console.error('Lỗi khi thêm sản phẩm yêu thích:', error);
-                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi thêm sản phẩm yêu thích.' }); // ĐÃ PHỤC HỒI
+                setMessage({ type: 'error', text: 'Có lỗi xảy ra khi thêm sản phẩm yêu thích.' });
                 // Hoàn tác cập nhật UI nếu có lỗi
                 setFavoriteProductIds(prev => {
                     const revertSet = new Set(prev);
@@ -177,11 +165,7 @@ export default function ProductPageClient() {
                 });
             }
         }
-
-        // Luôn tải lại danh sách yêu thích từ DB để đảm bảo đồng bộ cuối cùng
-        // await fetchFavorites(); // Removed to prevent double fetch, optimistic update is enough
     };
-
 
     // Hàm để chuyển đổi trạng thái thu gọn của một danh mục
     const toggleCategory = (categoryName: string) => {
@@ -220,7 +204,6 @@ export default function ProductPageClient() {
     const groupedProducts = useMemo(() => {
         const groups: { [key: string]: Product[] } = {};
         products.forEach(product => {
-            // Kiểm tra rõ ràng product.category có phải là chuỗi và không rỗng
             const categoryName: string = (typeof product.category === 'string' && product.category !== '')
                 ? product.category
                 : 'Chưa phân loại';
@@ -230,7 +213,6 @@ export default function ProductPageClient() {
             groups[categoryName].push(product);
         });
 
-        // Sort categories alphabetically, with "Chưa phân loại" last
         const sortedCategoryNames = Object.keys(groups).sort((a, b) => {
             if (a === 'Chưa phân loại') return 1;
             if (b === 'Chưa phân loại') return -1;
@@ -246,7 +228,6 @@ export default function ProductPageClient() {
 
     if (loading) return (
         <>
-            {/* Navbar removed from here */}
             <main className="p-6">
                 <p className="text-center text-gray-600">Đang tải sản phẩm...</p>
             </main>
@@ -255,7 +236,6 @@ export default function ProductPageClient() {
 
     if (error) return (
         <>
-            {/* Navbar removed from here */}
             <main className="p-6">
                 <p className="text-red-500 text-center">{error}</p>
             </main>
@@ -264,7 +244,6 @@ export default function ProductPageClient() {
 
     return (
         <>
-            {/* Navbar removed from here */}
             <main className="container mx-auto p-6">
                 <h1 className="text-3xl font-bold mb-8 text-center text-gray-800">
                     {searchTerm
@@ -272,13 +251,12 @@ export default function ProductPageClient() {
                         : "Tất cả Sản phẩm"}
                 </h1>
 
-                {/* Custom Message Box - ĐÃ PHỤC HỒI */}
                 {message && (
                     <div
                         className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white z-50
                             ${message.type === 'success' ? 'bg-green-500' :
-                              message.type === 'error' ? 'bg-red-500' :
-                              'bg-blue-500'}`}
+                                message.type === 'error' ? 'bg-red-500' :
+                                    'bg-blue-500'}`}
                         role="alert"
                     >
                         <div className="flex items-center justify-between">
@@ -319,13 +297,13 @@ export default function ProductPageClient() {
                                     </button>
                                 </div>
                                 {!collapsedCategories.has(group.categoryName) && (
-                                    <div className="relative"> {/* Added relative positioning for children */}
+                                    <div className="relative">
                                         <div
                                             id={`products-in-${group.categoryName.replace(/\s+/g, '-')}`}
                                             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
                                         >
                                             {productsToShow.map((product) => (
-                                                <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-105 relative"> {/* Added relative for heart icon positioning */}
+                                                <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-105 relative">
                                                     <Link href={`/products/${product.slug}`} className="block">
                                                         <img
                                                             src={product.image || 'https://placehold.co/400x300/cccccc/333333?text=No+Image'}
@@ -338,12 +316,27 @@ export default function ProductPageClient() {
                                                     {/* Heart icon for favorite */}
                                                     <button
                                                         onClick={() => handleToggleFavorite(product)}
-                                                        // Kiểm tra trực tiếp bằng product.id (number)
                                                         className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md text-red-500 hover:scale-110 transition-transform z-20"
                                                         aria-label={favoriteProductIds.has(product.id) ? "Xóa khỏi yêu thích" : "Thêm vào yêu thích"}
                                                     >
                                                         <Heart fill={favoriteProductIds.has(product.id) ? "currentColor" : "none"} className="h-6 w-6" />
                                                     </button>
+
+                                                    <span className={`absolute top-2 left-2 text-white text-xs font-bold rounded-full px-2 py-1 flex items-center justify-center min-w-[50px] h-[24px] z-10 ${product.stock_quantity <= 0
+                                                        ? 'bg-red-600' // Hết hàng: nền đỏ
+                                                        : product.stock_quantity < 10
+                                                            ? 'bg-yellow-500' // Còn ít (<10): nền vàng cam (hoặc bạn có thể dùng 'bg-red-500' nếu muốn cảnh báo mạnh hơn)
+                                                            : 'bg-green-600' // Còn hàng (>=10): nền xanh lá
+                                                        }`
+                                                    }>
+                                                        {product.stock_quantity <= 0 ? (
+                                                            'Hết hàng'
+                                                        ) : product.stock_quantity < 10 ? (
+                                                            `còn ${product.stock_quantity} SP` // Rút gọn "sản phẩm còn lại" thành "SP" để vừa badge nhỏ
+                                                        ) : (
+                                                            'Còn hàng'
+                                                        )}
+                                                    </span>
 
                                                     <div className="p-5 flex-grow flex flex-col">
                                                         <h3 className="text-xl font-bold mb-2">
@@ -354,17 +347,14 @@ export default function ProductPageClient() {
                                                         <p className="text-red-600 font-semibold mb-3 text-lg">
                                                             {product.price.toLocaleString('vi-VN')} <sup className="underline">đ</sup>
                                                         </p>
-                                                        {/* Dòng mô tả đã bị xóa khỏi đây */}
-                                                        <div className="flex space-x-2 mt-auto"> {/* Flex container for buttons */}
+                                                        <div className="flex space-x-2 mt-auto">
                                                             <button
-                                                                // Đã điều chỉnh padding và font size
                                                                 className="flex-1 bg-blue-100 text-blue-700 px-3 py-2 text-sm rounded-lg font-medium hover:bg-blue-200 transition-colors shadow-md"
                                                                 onClick={() => handleAddToCart(product)}
                                                             >
                                                                 Thêm vào giỏ hàng
                                                             </button>
                                                             <button
-                                                                // Đã điều chỉnh padding và font size
                                                                 className="flex-1 bg-green-100 text-green-700 px-3 py-2 text-sm rounded-lg font-medium hover:bg-green-200 transition-colors shadow-md"
                                                                 onClick={() => handleBuyNow(product)}
                                                             >

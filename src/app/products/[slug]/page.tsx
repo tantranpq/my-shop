@@ -6,20 +6,19 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import React, { useState, useEffect, useCallback } from 'react';
-import { Product } from "@/types/product";
-import { useParams, useRouter } from 'next/navigation'; // Import useRouter
+import { Product } from "@/types/product"; // Ensure this import is correct
+import { useParams, useRouter } from 'next/navigation';
 
 // Define an interface for the raw data coming from Supabase
 // This helps TypeScript understand the structure of the 'data' object
 interface SupabaseProductData {
-    id: number;
+    id: string; // ID is now string
     name: string;
     description: string;
     price: number;
     slug: string;
     image: string;
-    // 'images' can be a JSON string, an array of strings, or null
-    images: string | string[] | null;
+    images: string | string[] | null; // Can be JSON string, array, or null
     stock_quantity: number;
 }
 
@@ -27,7 +26,7 @@ export default function ProductDetail() {
     const params = useParams();
     const { slug } = params;
     const { addToCart } = useCart();
-    const router = useRouter(); // Initialize useRouter
+    const router = useRouter();
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -85,7 +84,7 @@ export default function ProductDetail() {
                 let parsedImages: string[] | null = null;
                 if (rawProductData.images) {
                     if (Array.isArray(rawProductData.images)) {
-                        // Fix for line 71: Use a type predicate to inform TypeScript about the item type
+                        // Type predicate to ensure all items are strings
                         if (rawProductData.images.every((item): item is string => typeof item === 'string')) {
                             parsedImages = rawProductData.images;
                         } else {
@@ -96,7 +95,7 @@ export default function ProductDetail() {
                         if (rawProductData.images.startsWith('[') && rawProductData.images.endsWith(']')) {
                             try {
                                 const tempArray = JSON.parse(rawProductData.images);
-                                // Fix for line 82: Use a type predicate here as well
+                                // Type predicate to ensure all items are strings
                                 if (Array.isArray(tempArray) && tempArray.every((item): item is string => typeof item === 'string')) {
                                     parsedImages = tempArray;
                                 } else {
@@ -108,7 +107,7 @@ export default function ProductDetail() {
                                 parsedImages = null;
                             }
                         } else if (rawProductData.images.trim() !== '') {
-                            parsedImages = [rawProductData.images];
+                            parsedImages = [rawProductData.images]; // Treat a single non-empty string as an array with one element
                         } else {
                             parsedImages = null;
                         }
@@ -119,7 +118,7 @@ export default function ProductDetail() {
                 }
 
                 const productData: Product = {
-                    id: rawProductData.id,
+                    id: String(rawProductData.id), // Ensure ID is treated as a string
                     name: rawProductData.name,
                     description: rawProductData.description,
                     price: rawProductData.price,
@@ -131,12 +130,13 @@ export default function ProductDetail() {
 
                 setProduct(productData);
 
+                // Set initial main image based on availability
                 if (productData.images && productData.images.length > 0) {
                     setMainImageIndex(0);
                 } else if (productData.image) {
-                    setMainImageIndex(-1);
+                    setMainImageIndex(-1); // Indicates using the single 'image' field
                 } else {
-                    setMainImageIndex(-1);
+                    setMainImageIndex(-1); // No images available
                 }
                 setLoading(false);
             } catch (err: unknown) {
@@ -155,23 +155,27 @@ export default function ProductDetail() {
     const handlePrevClick = () => {
         if (!product || !product.images || product.images.length === 0) return;
 
+        // Decrease mainImageIndex, ensuring it doesn't go below 0
         setMainImageIndex(prevIndex => Math.max(0, prevIndex - 1));
+        // Adjust startIndex for thumbnails to keep the current main image visible
         setStartIndex(prevIndex => Math.max(0, prevIndex - 1));
     };
 
     const handleNextClick = () => {
         if (!product || !product.images || product.images.length === 0) return;
 
+        // Increase mainImageIndex, ensuring it doesn't exceed the array length
         setMainImageIndex(prevIndex => Math.min(product.images!.length - 1, prevIndex + 1));
+        // Adjust startIndex for thumbnails to keep the current main image visible
         setStartIndex(prevIndex => Math.min(product.images!.length - visibleThumbnailsCount, prevIndex + 1));
     };
 
-    // Hàm đóng modal
+    // Function to close the zoom modal
     const closeZoomModal = useCallback(() => {
         setShowZoomModal(false);
     }, []);
 
-    // Xử lý phím Esc để đóng modal
+    // Effect to handle Escape key press for closing the modal
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
@@ -191,6 +195,30 @@ export default function ProductDetail() {
     }, [showZoomModal, closeZoomModal]);
 
 
+    const fallbackImageUrl = 'https://placehold.co/600x400/cccccc/333333?text=No+Image';
+
+    // handleBuyNow function
+    const handleBuyNow = (productToBuy: Product) => {
+        if (!productToBuy.slug) {
+            triggerNotification('Không thể mua ngay sản phẩm này (thiếu slug).');
+            return;
+        }
+        // Redirect to checkout page with a single item
+        router.push(`/checkout?items=${productToBuy.slug}:1`);
+    };
+
+    const currentMainImageUrl = (product?.images && mainImageIndex !== -1 && product.images[mainImageIndex])
+        ? product.images[mainImageIndex]
+        : product?.image || fallbackImageUrl;
+
+    const visibleThumbnails = product?.images
+        ? product.images.slice(startIndex, startIndex + visibleThumbnailsCount)
+        : [];
+
+    const canScrollPrev = mainImageIndex > 0;
+    const canScrollNext = product?.images && mainImageIndex < product.images.length - 1;
+
+    // --- Loading, Error, Not Found States ---
     if (loading) {
         return (
             <>
@@ -230,39 +258,14 @@ export default function ProductDetail() {
         );
     }
 
-    const fallbackImageUrl = 'https://placehold.co/600x400/cccccc/333333?text=No+Image';
-
-    // Updated handleBuyNow function
-    const handleBuyNow = (productToBuy: Product) => {
-        if (!productToBuy.slug) {
-            triggerNotification('Không thể mua ngay sản phẩm này (thiếu slug).');
-            return;
-        }
-        // Chuyển hướng đến trang thanh toán với sản phẩm đơn lẻ
-        // Định dạng URL: /checkout?items=product_slug:1
-        router.push(`/checkout?items=${productToBuy.slug}:1`);
-    };
-
-    const currentMainImageUrl = (product.images && mainImageIndex !== -1 && product.images[mainImageIndex])
-                                ? product.images[mainImageIndex]
-                                : product.image || fallbackImageUrl;
-
-    const visibleThumbnails = product.images
-        ? product.images.slice(startIndex, startIndex + visibleThumbnailsCount)
-        : [];
-
-    const canScrollPrev = mainImageIndex > 0;
-    const canScrollNext = product.images && mainImageIndex < product.images.length - 1;
-
-
+    // --- Main Product Display ---
     return (
         <>
             <Navbar />
             <main className="container mx-auto p-6 max-w-4xl">
-                {/* Main product info section */}
                 <div className="flex flex-col md:flex-row gap-8 bg-white p-6 rounded-lg shadow-lg">
                     <div className="flex-shrink-0 w-full md:w-1/2">
-                        {/* Khung ảnh chính cố định kích thước */}
+                        {/* Main Image Container */}
                         <div className="mb-4 rounded-lg overflow-hidden border border-gray-200 flex items-center justify-center bg-gray-100" style={{ height: '400px' }}>
                             <img
                                 src={currentMainImageUrl}
@@ -274,6 +277,7 @@ export default function ProductDetail() {
                                 onClick={() => setShowZoomModal(true)}
                             />
                         </div>
+                        {/* Thumbnail Navigation */}
                         {product.images && product.images.length > 0 && (
                             <div className="relative flex items-center justify-center gap-2">
                                 <button
@@ -295,9 +299,8 @@ export default function ProductDetail() {
                                                 key={absoluteIndex}
                                                 src={imgUrl || fallbackImageUrl}
                                                 alt={`${product.name} - ${absoluteIndex + 1}`}
-                                                className={`w-20 h-20 object-cover rounded-md cursor-pointer border-2 ${
-                                                    mainImageIndex === absoluteIndex ? 'border-blue-500' : 'border-transparent'
-                                                } hover:border-blue-400 transition-all duration-200`}
+                                                className={`w-20 h-20 object-cover rounded-md cursor-pointer border-2 ${mainImageIndex === absoluteIndex ? 'border-blue-500' : 'border-transparent'
+                                                    } hover:border-blue-400 transition-all duration-200`}
                                                 onClick={() => {
                                                     setMainImageIndex(absoluteIndex);
                                                 }}
@@ -328,11 +331,16 @@ export default function ProductDetail() {
                         <p className="text-2xl font-semibold text-blue-600 mb-4">
                             {product.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
                         </p>
-                        {/* Description was here, moved below */}
 
                         <div className="mb-6">
                             <span className={`text-lg font-medium ${product.stock_quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                Tồn kho: {product.stock_quantity > 0 ? `${product.stock_quantity} sản phẩm` : 'Hết hàng'}
+                                {product.stock_quantity <= 0 ? (
+                                    'Hết hàng'
+                                ) : product.stock_quantity < 10 ? (
+                                    `${product.stock_quantity} sản phẩm còn lại`
+                                ) : (
+                                    'còn hàng'
+                                )}
                             </span>
                         </div>
 
@@ -356,7 +364,7 @@ export default function ProductDetail() {
                                 className={`flex-1 bg-green-600 text-white px-6 py-3 rounded-lg text-lg font-semibold
                                             hover:bg-green-700 transition-colors duration-300 shadow-md
                                             ${product.stock_quantity === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => product && handleBuyNow(product)} // Pass product to handleBuyNow
+                                onClick={() => product && handleBuyNow(product)}
                                 disabled={product.stock_quantity === 0}
                             >
                                 Mua ngay
@@ -369,7 +377,7 @@ export default function ProductDetail() {
                     </div>
                 </div>
 
-                {/* Product Description Section - Moved here */}
+                {/* Product Description Section */}
                 <div className="bg-white p-6 rounded-lg shadow-lg mt-8">
                     <h2 className="text-2xl font-bold text-gray-900 mb-4">Mô tả chi tiết sản phẩm</h2>
                     <p className="text-gray-700 leading-relaxed">
@@ -378,7 +386,7 @@ export default function ProductDetail() {
                 </div>
             </main>
 
-            {/* Modal phóng to ảnh */}
+            {/* Modal for image zoom */}
             {showZoomModal && (
                 <div
                     className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"

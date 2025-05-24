@@ -1,25 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
+import { ChevronDown, ChevronUp, X, Upload, Plus } from 'lucide-react'; // Đảm bảo import X
+import Image from 'next/image';
 
-// --- Interfaces for Product Data ---
-interface Product {
-    id: string;
-    name: string;
-    description: string | null;
-    price: number;
-    image: string | null; // Tên cột trong DB và trong frontend
-    stock_quantity: number;
-    category: string | null;
-    created_at: string;
-    updated_at: string;
-    slug: string | null; // <-- Đã thêm slug
-}
+import { Product } from '@/types/product'; // Đảm bảo Product interface đã được cập nhật
+
 
 // --- MultiSelect Component ---
 interface MultiSelectOption {
@@ -120,6 +110,19 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onCh
 // --- End MultiSelect Component ---
 
 
+// --- Constants ---
+const PRODUCTS_BUCKET_NAME = 'product-images'; // Make sure this matches your Supabase bucket name
+// URL ảnh mặc định cho product.image nếu không có ảnh nào được upload/chọn
+const DEFAULT_PRODUCT_IMAGE_PLACEHOLDER = '/404-error.png'; // <-- CẬP NHẬT ĐƯỜNG DẪN NÀY ĐẾN ẢNH PLACEHOLDER CỦA BẠN
+
+
+// Helper to generate a unique file path for Supabase Storage
+function generateFilePath(file: File, folder: string): string {
+    const fileExtension = file.name.split('.').pop();
+    const uniqueId = uuidv4();
+    return `${folder}/${uniqueId}.${fileExtension}`;
+}
+
 // --- Component chính AdminProductsPage ---
 export default function AdminProductsPage() {
     const supabaseClient = useSupabaseClient();
@@ -128,15 +131,20 @@ export default function AdminProductsPage() {
     const queryClient = useQueryClient();
 
     // State quản lý UI/Error
-    // const [error, setError] = useState<string | null>(null);
     const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
     const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
     const [isSubmitting, setIsSubmitting] = useState(false); // Trạng thái gửi form
 
-    // States cho Image Upload
-    const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-    const [uploadingImage, setUploadingImage] = useState(false);
+    // States cho Image Upload (UPDATED for image and images)
+    const [newImageFile, setNewImageFile] = useState<File | null>(null); // File mới cho cột 'image' (ảnh bìa)
+    const [existingImageProductUrl, setExistingImageProductUrl] = useState<string | null>(null); // URL của ảnh bìa hiện tại
+
+    const [newGalleryImageFiles, setNewGalleryImageFiles] = useState<File[]>([]); // Các file mới cho cột 'images' (bộ sưu tập)
+    const [existingGalleryImageUrls, setExistingGalleryImageUrls] = useState<string[]>([]); // Các URL ảnh bộ sưu tập đã có
+    const [imagesToDeleteFromGallery, setImagesToDeleteFromGallery] = useState<string[]>([]); // Các URL ảnh bộ sưu tập đánh dấu để xóa
+
+    const [uploadingImagesStatus, setUploadingImagesStatus] = useState<string | null>(null); // To show upload progress message
 
     // States cho Phân trang
     const [currentPage, setCurrentPage] = useState(0); // Trang hiện tại (0-indexed)
@@ -147,15 +155,15 @@ export default function AdminProductsPage() {
     // States cho Tìm kiếm và Lọc
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState<string[]>(['all']); // Changed to array for multi-select
-    const [stockQuantityFilter, setStockQuantityFilter] = useState<number | ''>(''); // New state for stock quantity filter
+    const [categoryFilter, setCategoryFilter] = useState<string[]>(['all']);
+    const [stockQuantityFilter, setStockQuantityFilter] = useState<number | ''>('');
 
     // Debounce effect cho tìm kiếm
     useEffect(() => {
         const handler = setTimeout(() => {
             setDebouncedSearchQuery(searchQuery);
-            setCurrentPage(0); // Reset về trang đầu khi có tìm kiếm mới
-        }, 500); // 500ms delay
+            setCurrentPage(0);
+        }, 500);
 
         return () => {
             clearTimeout(handler);
@@ -190,8 +198,8 @@ export default function AdminProductsPage() {
         data: productsData,
         isLoading: isLoadingProducts,
         error: productsQueryError,
-    } = useQuery< { products: Product[], totalCount: number | null }, Error>({
-        queryKey: ['adminProducts', currentPage, debouncedSearchQuery, categoryFilter, stockQuantityFilter], // Add new filters to queryKey
+    } = useQuery<{ products: Product[], totalCount: number | null }, Error>({
+        queryKey: ['adminProducts', currentPage, debouncedSearchQuery, categoryFilter, stockQuantityFilter],
         queryFn: async () => {
             if (userRole !== 'admin') {
                 throw new Error('Bạn không có quyền xem sản phẩm.');
@@ -205,7 +213,8 @@ export default function AdminProductsPage() {
                   name,
                   description,
                   price,
-                  image,
+                  image,       
+                  images,       
                   stock_quantity,
                   category,
                   created_at,
@@ -213,17 +222,14 @@ export default function AdminProductsPage() {
                   slug
                 `, { count: 'exact' });
 
-            // Áp dụng tìm kiếm nếu có
             if (debouncedSearchQuery) {
                 query = query.or(`name.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
             }
 
-            // Apply category filter (multi-select)
             if (categoryFilter.length > 0 && !categoryFilter.includes('all')) {
                 query = query.in('category', categoryFilter);
             }
 
-            // Apply stock quantity filter
             if (stockQuantityFilter !== '' && stockQuantityFilter >= 0) {
                 query = query.gte('stock_quantity', stockQuantityFilter);
             }
@@ -233,19 +239,26 @@ export default function AdminProductsPage() {
                 .range(offset, offset + limit - 1);
 
             if (error) throw error;
-            return { products: data as unknown as Product[], totalCount: count };
+            
+            // Ensure `images` is always an array and `image` is always a string
+            const productsWithTypeGuards = data ? data.map(p => ({
+                ...p,
+                images: Array.isArray(p.images) ? p.images : [], // Ensure images is an array
+                image: typeof p.image === 'string' && p.image ? p.image : DEFAULT_PRODUCT_IMAGE_PLACEHOLDER // Ensure image is string
+            })) : [];
+
+            return { products: productsWithTypeGuards as Product[], totalCount: count };
         },
         enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
         staleTime: 1000 * 60,
         placeholderData: (previousData) => previousData,
     });
 
-    // Extract products and totalCount from productsData
     const products = productsData?.products || [];
     const totalProducts = productsData?.totalCount || 0;
     const totalPages = Math.ceil(totalProducts / itemsPerPage);
 
-    // --- NEW: UseQuery để lấy tất cả danh mục độc lập ---
+    // --- UseQuery để lấy tất cả danh mục độc lập ---
     const { data: allCategoriesRaw, isLoading: isLoadingAllCategories } = useQuery<
         { category: string }[],
         Error
@@ -255,16 +268,14 @@ export default function AdminProductsPage() {
             const { data, error } = await supabaseClient
                 .from('products')
                 .select('category')
-                .not('category', 'is', null); // Removed .distinct() from here
-
+                .not('category', 'is', null);
             if (error) throw error;
             return data as { category: string }[];
         },
         enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
-        staleTime: 1000 * 60 * 5, // Categories don't change often, longer stale time
+        staleTime: 1000 * 60 * 5,
     });
 
-    // Extract unique categories for the filter dropdown from allCategoriesRaw
     const uniqueCategoriesOptions: MultiSelectOption[] = useMemo(() => {
         const categories = new Set<string>();
         if (allCategoriesRaw && Array.isArray(allCategoriesRaw)) {
@@ -279,7 +290,81 @@ export default function AdminProductsPage() {
     }, [allCategoriesRaw]);
 
 
-    // --- Hàm xử lý thêm/cập nhật sản phẩm ---
+    // --- Hàm mở form chỉnh sửa ---
+    const openEditForm = useCallback((product: Product) => {
+        setEditingProduct(product);
+        setNewImageFile(null); // Reset new file for main image
+        setExistingImageProductUrl(product.image); // Set existing main image URL
+
+        setNewGalleryImageFiles([]); // Reset new gallery files
+        setExistingGalleryImageUrls(product.images || []); // Set existing gallery URLs
+        setImagesToDeleteFromGallery([]); // Reset deletions
+        setIsFormOpen(true);
+    }, []);
+
+    // --- Hàm xử lý đóng form (Reset all form states) ---
+    const closeForm = useCallback(() => {
+        setIsFormOpen(false);
+        setEditingProduct(null);
+        setNewImageFile(null);
+        setExistingImageProductUrl(null); // Reset
+        setNewGalleryImageFiles([]);
+        setExistingGalleryImageUrls([]);
+        setImagesToDeleteFromGallery([]);
+        setUploadingImagesStatus(null);
+    }, []);
+
+    // --- Upload file to Supabase Storage ---
+    const uploadFile = async (file: File, folder: string): Promise<string | null> => {
+        const filePath = generateFilePath(file, folder);
+        const { data, error } = await supabaseClient.storage
+            .from(PRODUCTS_BUCKET_NAME)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+            });
+
+        if (error) {
+            console.error(`Lỗi upload file ${file.name} to ${folder}:`, error);
+            toast.error(`Lỗi upload ảnh "${file.name}": ${error.message}`);
+            return null;
+        }
+
+        const { data: publicUrlData } = supabaseClient.storage
+            .from(PRODUCTS_BUCKET_NAME)
+            .getPublicUrl(data.path);
+
+        return publicUrlData.publicUrl;
+    };
+
+    // --- Delete file from Supabase Storage ---
+    const deleteFileFromStorage = async (url: string) => {
+        try {
+            // Không xóa ảnh placeholder
+            if (url === DEFAULT_PRODUCT_IMAGE_PLACEHOLDER) {
+                console.log("Skipping deletion of default placeholder image.");
+                return;
+            }
+
+            const pathSegments = url.split(`${PRODUCTS_BUCKET_NAME}/`);
+            if (pathSegments.length < 2) {
+                console.warn("Could not extract storage path from URL (unexpected format):", url);
+                return;
+            }
+            const pathInBucket = pathSegments[1];
+
+            const { error } = await supabaseClient.storage.from(PRODUCTS_BUCKET_NAME).remove([pathInBucket]);
+            if (error) {
+                console.error(`Lỗi xóa ảnh từ Storage: ${url}`, error);
+            } else {
+                console.log(`Đã xóa ảnh: ${url}`);
+            }
+        } catch (e) {
+            console.error("Lỗi khi chuẩn bị xóa ảnh khỏi Storage:", e);
+        }
+    };
+
+    // --- Form Submission Handler (significantly updated) ---
     const handleSaveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!user?.id || userRole !== 'admin') {
@@ -288,83 +373,113 @@ export default function AdminProductsPage() {
         }
 
         setIsSubmitting(true);
+        setUploadingImagesStatus('Đang chuẩn bị...');
 
-        const formData = new FormData(event.currentTarget);
-        const productData: Partial<Product> = {
-            name: formData.get('name') as string,
-            description: formData.get('description') as string,
-            price: parseFloat(formData.get('price') as string),
-            stock_quantity: parseInt(formData.get('stock_quantity') as string),
-            category: formData.get('category') as string,
-            slug: formData.get('slug') as string, // <-- Lấy slug từ form
-        };
+        try {
+            const formData = new FormData(event.currentTarget);
+            const productData: Partial<Product> = {
+                name: formData.get('name') as string,
+                description: formData.get('description') as string,
+                price: parseFloat(formData.get('price') as string),
+                stock_quantity: parseInt(formData.get('stock_quantity') as string),
+                category: formData.get('category') as string,
+                slug: formData.get('slug') as string,
+            };
 
-        let imageUrlToSave: string | null = null;
+            let finalImageUrl = existingImageProductUrl; // For the main 'image' column
+            let finalGalleryImageUrls: string[] = [...existingGalleryImageUrls]; // For the 'images' array column
 
-        // Xử lý upload ảnh nếu có file mới được chọn
-        if (selectedImageFile) {
-            setUploadingImage(true);
-            const fileExtension = selectedImageFile.name.split('.').pop();
-            const fileName = `${uuidv4()}.${fileExtension}`;
-            const filePath = `product_images/${fileName}`;
 
-            const { error: uploadError } = await supabaseClient.storage
-                .from('product-images')
-                .upload(filePath, selectedImageFile, {
-                    cacheControl: '3600',
-                    upsert: false,
-                });
-
-            setUploadingImage(false);
-
-            if (uploadError) {
-                console.error('Lỗi khi tải ảnh lên:', uploadError);
-                toast.error('Lỗi khi tải ảnh lên: ' + uploadError.message);
-                setIsSubmitting(false);
-                return;
+            // 1. Handle Main Image Upload (product.image)
+            if (newImageFile) {
+                setUploadingImagesStatus('Đang tải ảnh bìa...');
+                const url = await uploadFile(newImageFile, 'covers'); // Assuming 'covers' is the folder for main images
+                if (url) {
+                    finalImageUrl = url;
+                    // Delete old main image if it was replaced and it's not the default placeholder
+                    if (existingImageProductUrl && existingImageProductUrl !== url) {
+                        await deleteFileFromStorage(existingImageProductUrl);
+                    }
+                } else {
+                    throw new Error("Tải ảnh bìa lên thất bại.");
+                }
+            } else if (!existingImageProductUrl && editingProduct?.image) {
+                // If user cleared existing main image without selecting new one, and there was an original
+                // In this case, we revert to a default placeholder.
+                finalImageUrl = DEFAULT_PRODUCT_IMAGE_PLACEHOLDER;
+                await deleteFileFromStorage(editingProduct.image); // Delete original if it's not the placeholder
+            } else if (!finalImageUrl) {
+                // If no new file and no existing URL (e.g., creating a new product without selecting image)
+                finalImageUrl = DEFAULT_PRODUCT_IMAGE_PLACEHOLDER;
             }
 
-            const { data: publicUrlData } = supabaseClient.storage
-                .from('product-images')
-                .getPublicUrl(filePath);
 
-            imageUrlToSave = publicUrlData.publicUrl;
-        } else if (editingProduct && editingProduct.image) {
-            imageUrlToSave = editingProduct.image;
-        } else {
-            imageUrlToSave = null;
-        }
+            // 2. Handle Deletion of Marked Gallery Images
+            if (imagesToDeleteFromGallery.length > 0) {
+                setUploadingImagesStatus(`Đang xóa ${imagesToDeleteFromGallery.length} ảnh cũ từ bộ sưu tập...`);
+                // Remove deleted images from finalGalleryImageUrls array first
+                finalGalleryImageUrls = finalGalleryImageUrls.filter(url => !imagesToDeleteFromGallery.includes(url));
 
-        productData.image = imageUrlToSave;
+                for (const url of imagesToDeleteFromGallery) {
+                    await deleteFileFromStorage(url);
+                }
+            }
 
-        let error;
-        if (editingProduct) {
-            ({ error } = await supabaseClient
-                .from('products')
-                .update(productData)
-                .eq('id', editingProduct.id));
-        } else {
-            ({ error } = await supabaseClient
-                .from('products')
-                .insert([productData]));
-        }
+            // 3. Handle New Gallery Images Upload
+            if (newGalleryImageFiles.length > 0) {
+                setUploadingImagesStatus(`Đang tải ${newGalleryImageFiles.length} ảnh bộ sưu tập mới...`);
+                const newUrls: string[] = [];
+                for (let i = 0; i < newGalleryImageFiles.length; i++) {
+                    const file = newGalleryImageFiles[i];
+                    setUploadingImagesStatus(`Đang tải ảnh ${i + 1}/${newGalleryImageFiles.length} của bộ sưu tập...`);
+                    const url = await uploadFile(file, 'gallery'); // Assuming 'gallery' is the folder for gallery images
+                    if (url) {
+                        newUrls.push(url);
+                    } else {
+                        console.warn(`Bỏ qua ảnh "${file.name}" do lỗi tải lên.`);
+                    }
+                }
+                finalGalleryImageUrls.push(...newUrls);
+            }
 
-        setIsSubmitting(false);
+            // Update productData with final image URLs
+            productData.image = finalImageUrl; // Assign the non-null string
+            productData.images = finalGalleryImageUrls; // Assign the array of strings
 
-        if (error) {
-            console.error('Lỗi khi lưu sản phẩm:', error);
-            toast.error('Lỗi khi lưu sản phẩm: ' + error.message);
-        } else {
-            queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
-            queryClient.invalidateQueries({ queryKey: ['allCategories'] }); // Invalidate allCategories to update filter options
-            setIsFormOpen(false);
-            setEditingProduct(null);
-            setSelectedImageFile(null);
-            toast.success('Sản phẩm đã được lưu thành công!');
+            setUploadingImagesStatus('Đang lưu thông tin sản phẩm...');
+
+            // 4. Save product data to database
+            let error;
+            if (editingProduct) {
+                ({ error } = await supabaseClient
+                    .from('products')
+                    .update(productData)
+                    .eq('id', editingProduct.id));
+            } else {
+                ({ error } = await supabaseClient
+                    .from('products')
+                    .insert([productData]));
+            }
+
+            if (error) {
+                throw new Error(`Lỗi khi lưu sản phẩm: ${error.message}`);
+            } else {
+                toast.success(editingProduct ? 'Cập nhật sản phẩm thành công!' : 'Thêm sản phẩm thành công!');
+                queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
+                queryClient.invalidateQueries({ queryKey: ['allCategories'] });
+                closeForm(); // Close and reset form
+            }
+
+        } catch (err: any) {
+            console.error('Lỗi trong quá trình lưu sản phẩm:', err);
+            toast.error(err.message || 'Đã xảy ra lỗi không xác định.');
+        } finally {
+            setIsSubmitting(false);
+            setUploadingImagesStatus(null);
         }
     };
 
-    // --- Hàm xử lý xóa sản phẩm ---
+    // --- Hàm xử lý xóa sản phẩm (chỉnh sửa để xóa cả image và images) ---
     const handleDeleteProduct = async (productId: string) => {
         if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) return;
         if (!user?.id || userRole !== 'admin') {
@@ -372,49 +487,43 @@ export default function AdminProductsPage() {
             return;
         }
 
-        const { error: dbError, data: productToDelete } = await supabaseClient
+        // Lấy thông tin sản phẩm để xóa ảnh khỏi Storage
+        const { data: productToDelete, error: fetchError } = await supabaseClient
             .from('products')
-            .select('image')
+            .select('image, images') // Select both image fields
             .eq('id', productId)
             .single();
 
-        if (dbError) {
-            console.error('Lỗi khi lấy thông tin sản phẩm để xóa ảnh:', dbError);
-            toast.error('Lỗi khi xóa sản phẩm: ' + dbError.message);
+        if (fetchError) {
+            console.error('Lỗi khi lấy thông tin sản phẩm để xóa ảnh:', fetchError);
+            toast.error('Lỗi khi xóa sản phẩm: ' + fetchError.message);
             return;
         }
 
-        // Xóa ảnh khỏi Supabase Storage nếu có
-        if (productToDelete && productToDelete.image) {
-            try {
-                const imageUrl = productToDelete.image;
-                const pathInBucket = imageUrl.split('public/product-images/')[1];
+        // Xóa ảnh bìa (main image)
+        if (productToDelete?.image) {
+            await deleteFileFromStorage(productToDelete.image);
+        }
 
-                if (pathInBucket) {
-                    const { error: storageError } = await supabaseClient.storage
-                        .from('product-images')
-                        .remove([pathInBucket]);
-
-                    if (storageError) {
-                        console.error('Lỗi khi xóa ảnh khỏi Storage:', storageError);
-                    }
-                }
-            } catch (e) {
-                console.error("Lỗi khi phân tích URL ảnh để xóa:", e);
+        // Xóa tất cả ảnh gallery
+        if (productToDelete?.images && productToDelete.images.length > 0) {
+            for (const imageUrl of productToDelete.images) {
+                await deleteFileFromStorage(imageUrl);
             }
         }
 
-        const { error } = await supabaseClient
+        // Xóa sản phẩm khỏi database
+        const { error: dbError } = await supabaseClient
             .from('products')
             .delete()
             .eq('id', productId);
 
-        if (error) {
-            console.error('Lỗi khi xóa sản phẩm khỏi DB:', error);
-            toast.error('Lỗi khi xóa sản phẩm: ' + error.message);
+        if (dbError) {
+            console.error('Lỗi khi xóa sản phẩm khỏi DB:', dbError);
+            toast.error('Lỗi khi xóa sản phẩm: ' + dbError.message);
         } else {
             queryClient.invalidateQueries({ queryKey: ['adminProducts'] });
-            queryClient.invalidateQueries({ queryKey: ['allCategories'] }); // Invalidate allCategories to update filter options
+            queryClient.invalidateQueries({ queryKey: ['allCategories'] });
             toast.success('Sản phẩm đã được xóa thành công!');
         }
     };
@@ -454,7 +563,7 @@ export default function AdminProductsPage() {
                 />
                 {/* Nút thêm sản phẩm mới */}
                 <button
-                    onClick={() => { setIsFormOpen(true); setEditingProduct(null); setSelectedImageFile(null); }}
+                    onClick={() => { closeForm(); setIsFormOpen(true); }} // Use closeForm to reset states
                     className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
                 >
                     Thêm Sản phẩm mới
@@ -504,7 +613,7 @@ export default function AdminProductsPage() {
                                     type="text"
                                     id="name"
                                     name="name"
-                                    defaultValue={editingProduct?.name || ''}
+                                    defaultValue={String(editingProduct?.name ?? '')}
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                     required
                                 />
@@ -514,30 +623,28 @@ export default function AdminProductsPage() {
                                 <textarea
                                     id="description"
                                     name="description"
-                                    defaultValue={editingProduct?.description || ''}
+                                    defaultValue={String(editingProduct?.description ?? '')}
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                     rows={3}
                                 ></textarea>
                             </div>
-                            {/* Input cho Slug */}
                             <div className="mb-4">
-                                 <label htmlFor="slug" className="block text-gray-700 text-sm font-bold mb-2">Slug:</label>
+                                <label htmlFor="slug" className="block text-gray-700 text-sm font-bold mb-2">Slug:</label>
                                 <input
                                     type="text"
                                     id="slug"
                                     name="slug"
-                                    defaultValue={editingProduct?.slug || ''}
+                                    defaultValue={String(editingProduct?.slug ?? '')}
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                 />
                             </div>
-                            {/* Hết Input cho Slug */}
                             <div className="mb-4">
                                 <label htmlFor="price" className="block text-gray-700 text-sm font-bold mb-2">Giá:</label>
                                 <input
                                     type="number"
                                     id="price"
                                     name="price"
-                                    defaultValue={editingProduct?.price || 0}
+                                    defaultValue={editingProduct?.price ?? 0}
                                     step="0.01"
                                     min="0"
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
@@ -550,14 +657,51 @@ export default function AdminProductsPage() {
                                     type="number"
                                     id="stock_quantity"
                                     name="stock_quantity"
-                                    defaultValue={editingProduct?.stock_quantity || 0}
+                                    defaultValue={editingProduct?.stock_quantity ?? 0}
                                     min="0"
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                     required
                                 />
                             </div>
-                            <div className="mb-4">
-                                <label htmlFor="image_upload" className="block text-gray-700 text-sm font-bold mb-2">Chọn ảnh:</label>
+
+                            {/* --- Start Main Image Field (product.image) --- */}
+                            <div className="mb-6">
+                                <label htmlFor="image_upload" className="block text-gray-700 text-sm font-bold mb-2">Ảnh bìa:</label>
+                                {/* Display new main image preview */}
+                                {newImageFile ? (
+                                    <div className="mb-2 relative w-32 h-24 border rounded overflow-hidden group">
+                                        <Image src={URL.createObjectURL(newImageFile)} alt="Ảnh bìa mới" layout="fill" objectFit="cover" />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                URL.revokeObjectURL(URL.createObjectURL(newImageFile));
+                                                setNewImageFile(null);
+                                            }}
+                                            className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                            aria-label="Xóa ảnh bìa mới"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ) : (existingImageProductUrl && typeof existingImageProductUrl === 'string' && existingImageProductUrl !== DEFAULT_PRODUCT_IMAGE_PLACEHOLDER) ? (
+                                    // Display existing main image, allow setting to null (which means placeholder will be used on save)
+                                    <div className="mb-2 relative w-32 h-24 border rounded overflow-hidden group">
+                                        <Image src={existingImageProductUrl} alt="Ảnh bìa hiện tại" layout="fill" objectFit="cover" />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setExistingImageProductUrl(null); // Mark for removal (will be handled in save logic)
+                                            }}
+                                            className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                            aria-label="Xóa ảnh bìa"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <p className="text-gray-400 mb-2">Chưa có ảnh bìa hoặc đang sử dụng ảnh mặc định.</p>
+                                )}
+
                                 <input
                                     type="file"
                                     id="image_upload"
@@ -565,34 +709,99 @@ export default function AdminProductsPage() {
                                     accept="image/*"
                                     onChange={(e) => {
                                         if (e.target.files && e.target.files[0]) {
-                                            setSelectedImageFile(e.target.files[0]);
+                                            setNewImageFile(e.target.files[0]);
                                         } else {
-                                            setSelectedImageFile(null);
+                                            setNewImageFile(null);
                                         }
                                     }}
-                                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                    className="block w-full text-sm text-gray-500
+                                            file:mr-4 file:py-2 file:px-4
+                                            file:rounded-full file:border-0
+                                            file:text-sm file:font-semibold
+                                            file:bg-blue-50 file:text-blue-700
+                                            hover:file:bg-blue-100"
                                 />
-                                {(editingProduct?.image && !selectedImageFile) && (
-                                    <div className="mt-2">
-                                        <p className="text-sm text-gray-600">Ảnh hiện tại:</p>
-                                        <img src={editingProduct.image} alt="Current Product" className="h-20 w-20 object-cover rounded mt-1" />
-                                    </div>
+                                {!(newImageFile || (editingProduct?.image && typeof editingProduct.image === 'string' && editingProduct.image !== DEFAULT_PRODUCT_IMAGE_PLACEHOLDER) || existingImageProductUrl) && (
+                                    <p className="text-red-500 text-xs italic mt-1">Ảnh bìa là bắt buộc (sẽ dùng ảnh mặc định nếu không chọn).</p>
                                 )}
-                                {selectedImageFile && (
-                                    <div className="mt-2">
-                                        <p className="text-sm text-gray-600">Ảnh mới:</p>
-                                        <img src={URL.createObjectURL(selectedImageFile)} alt="Preview" className="h-20 w-20 object-cover rounded mt-1" />
-                                    </div>
-                                )}
-                                {uploadingImage && <p className="text-sm text-blue-600 mt-2">Đang tải ảnh lên...</p>}
                             </div>
+                            {/* --- End Main Image Field --- */}
+
+
+                            {/* --- Start Gallery Images Field --- */}
+                            <div className="mb-6">
+                                <label htmlFor="gallery_images_upload" className="block text-gray-700 text-sm font-bold mb-2">Bộ sưu tập ảnh:</label>
+
+                                {/* Combined Existing and New Gallery Images Display */}
+                                {(existingGalleryImageUrls.filter(url => !imagesToDeleteFromGallery.includes(url)).length > 0 || newGalleryImageFiles.length > 0) && (
+                                    <div className="flex flex-wrap gap-2 mb-4 p-2 border rounded-md bg-gray-50">
+                                        {/* Existing Images (not marked for deletion) */}
+                                        {existingGalleryImageUrls.map((url, index) => (
+                                            typeof url === 'string' && !imagesToDeleteFromGallery.includes(url) ? (
+                                                <div key={url} className="relative w-24 h-24 border rounded overflow-hidden group">
+                                                    <Image src={url} alt={`Gallery ${index}`} layout="fill" objectFit="cover" />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setImagesToDeleteFromGallery(prev => [...prev, url]); // Mark for deletion
+                                                        }}
+                                                        className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        aria-label="Xóa ảnh gallery"
+                                                    >
+                                                        <X size={16} />
+                                                    </button>
+                                                </div>
+                                            ) : null
+                                        ))}
+                                        {/* New Images */}
+                                        {newGalleryImageFiles.map((file, index) => (
+                                            <div key={`new-${index}-${file.name}`} className="relative w-24 h-24 border rounded overflow-hidden group">
+                                                <Image src={URL.createObjectURL(file)} alt={`New Gallery ${index}`} layout="fill" objectFit="cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        URL.revokeObjectURL(URL.createObjectURL(file));
+                                                        setNewGalleryImageFiles(prev => prev.filter((_, i) => i !== index));
+                                                    }}
+                                                    className="absolute top-1 right-1 bg-red-500 bg-opacity-75 text-white rounded-full p-1 text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    aria-label="Xóa ảnh mới"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <input
+                                    type="file"
+                                    id="gallery_images_upload"
+                                    name="gallery_images_upload"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => {
+                                        if (e.target.files) {
+                                            setNewGalleryImageFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                                        }
+                                    }}
+                                    className="block w-full text-sm text-gray-500
+                                            file:mr-4 file:py-2 file:px-4
+                                            file:rounded-full file:border-0
+                                            file:text-sm file:font-semibold
+                                            file:bg-blue-50 file:text-blue-700
+                                            hover:file:bg-blue-100"
+                                />
+                            </div>
+                            {/* --- End Gallery Images Field --- */}
+
+
                             <div className="mb-4">
                                 <label htmlFor="category" className="block text-gray-700 text-sm font-bold mb-2">Danh mục:</label>
                                 <input
                                     type="text"
                                     id="category"
                                     name="category"
-                                    defaultValue={editingProduct?.category || ''}
+                                    defaultValue={String(editingProduct?.category ?? '')}
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                 />
                             </div>
@@ -601,19 +810,15 @@ export default function AdminProductsPage() {
                                 <button
                                     type="submit"
                                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                                    disabled={isSubmitting || uploadingImage}
+                                    disabled={isSubmitting || !!uploadingImagesStatus} // Disable if any image task is ongoing
                                 >
-                                    {isSubmitting ? 'Đang lưu...' : (uploadingImage ? 'Đang tải ảnh...' : 'Lưu sản phẩm')}
+                                    {isSubmitting ? 'Đang lưu...' : (uploadingImagesStatus || (editingProduct ? 'Cập Nhật Sản Phẩm' : 'Thêm Sản Phẩm'))}
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setIsFormOpen(false);
-                                        setEditingProduct(null);
-                                        setSelectedImageFile(null);
-                                    }}
+                                    onClick={closeForm}
                                     className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                                    disabled={isSubmitting || uploadingImage}
+                                    disabled={isSubmitting || !!uploadingImagesStatus}
                                 >
                                     Hủy
                                 </button>
@@ -624,10 +829,10 @@ export default function AdminProductsPage() {
             )}
 
             {/* Bảng hiển thị danh sách sản phẩm */}
-            {products && products.length === 0 && !debouncedSearchQuery ? (
+            {products && products.length === 0 && !debouncedSearchQuery && (categoryFilter.length === 0 || categoryFilter.includes('all')) && stockQuantityFilter === '' ? (
                 <p className="text-center text-gray-600 text-lg">Chưa có sản phẩm nào.</p>
-            ) : products && products.length === 0 && debouncedSearchQuery ? (
-                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với: <strong>{debouncedSearchQuery}</strong></p>
+            ) : products && products.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">Không tìm thấy sản phẩm nào khớp với tiêu chí tìm kiếm/lọc.</p>
             ) : (
                 <div className="overflow-x-auto bg-white shadow-md rounded-lg">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -640,7 +845,8 @@ export default function AdminProductsPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giá</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tồn kho</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Danh mục</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ảnh</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ảnh bìa</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ảnh bộ sưu tập</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                             </tr>
                         </thead>
@@ -649,22 +855,45 @@ export default function AdminProductsPage() {
                                 <tr key={product.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">...{String(product.id).slice(-8)}</td>
                                     <td className="px-6 py-4 text-sm text-gray-900 font-medium">{product.name}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.description || 'N/A'}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.slug || 'N/A'}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.description ?? 'N/A'}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs overflow-hidden text-ellipsis">{product.slug ?? 'N/A'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.stock_quantity}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category ?? 'N/A'}</td>
+                                    {/* Main Image Column - Applied IIFE for robust type inference */}
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {product.image ? (
-                                            <img src={product.image} alt={product.name} className="h-10 w-10 object-cover rounded" />
-                                        ) : (
-                                            <span className="text-gray-400">Không ảnh</span>
-                                        )}
+                                        {(() => {
+                                            // product.image is guaranteed to be a string or DEFAULT_PRODUCT_IMAGE_PLACEHOLDER from useQuery
+                                            if (product.image && typeof product.image === 'string' && product.image !== DEFAULT_PRODUCT_IMAGE_PLACEHOLDER) {
+                                                return <Image src={product.image} alt={product.name} width={40} height={40} objectFit="cover" className="rounded" />;
+                                            }
+                                            return <span className="text-gray-400">Không ảnh</span>;
+                                        })()}
+                                    </td>
+                                    {/* Gallery Images Column - Applied IIFE for robust type inference */}
+                                    <td className="px-6 py-4 text-sm text-gray-900">
+                                        {(() => {
+                                            if (product.images && product.images.length > 0) {
+                                                const imagesToDisplay = product.images.filter(imgUrl => typeof imgUrl === 'string').slice(0, 3);
+                                                const remainingImagesCount = product.images.length - 3;
+                                                return (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {imagesToDisplay.map((imgUrl, idx) => (
+                                                            <Image key={idx} src={imgUrl} alt={`${product.name} gallery ${idx}`} width={30} height={30} objectFit="cover" className="rounded" />
+                                                        ))}
+                                                        {remainingImagesCount > 0 && (
+                                                            <span className="text-gray-500 text-xs mt-1">+{remainingImagesCount}</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+                                            return <span className="text-gray-400">Không có</span>;
+                                        })()}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button
-                                            onClick={() => { setIsFormOpen(true); setEditingProduct(product); setSelectedImageFile(null); }}
-                                            className="text-indigo-600 hover:text-indigo-900 mr-3"
+                                            onClick={() => openEditForm(product)}
+                                            className="text-indigo-600 hover:text-indigo-900 mr-4"
                                         >
                                             Sửa
                                         </button>
@@ -682,7 +911,7 @@ export default function AdminProductsPage() {
                 </div>
             )}
 
-            {/* Pagination controls */}
+            {/* Pagination Controls */}
             {totalPages > 1 && (
                 <nav className="flex justify-center mt-4">
                     <ul className="flex items-center -space-x-px h-10 text-base">

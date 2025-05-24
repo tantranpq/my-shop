@@ -9,5 +9,6 @@ export interface Product {
   description: string | null; // Mô tả chi tiết sản phẩm, CÓ THỂ LÀ NULL
   images: string[] | null; // Mảng các URL hình ảnh phụ (từ cột JSONB), có thể null
   stock_quantity: number; // Số lượng tồn kho của sản phẩm
+  category?: string | null;
   [key: string]: unknown; // Cho phép các thuộc tính khác không được định nghĩa trước
 }

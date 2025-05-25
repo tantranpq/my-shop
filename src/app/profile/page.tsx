@@ -1,15 +1,10 @@
+// app/profile/page.tsx
 "use client";
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
-// import Link from "next/link";
+import Navbar from '@/components/Navbar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-// Import the existing Navbar component
-import Navbar from '@/components/Navbar'; // Assuming this path is correct based on your project structure
-
-// Make sure to include Font Awesome in your project's HTML file (e.g., public/index.html or _document.tsx for Next.js)
-// Example CDN link in <head>: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"></link>
 
 interface Profile {
     full_name: string | null;
@@ -65,31 +60,30 @@ function ProfileContent() {
     const queryClient = useQueryClient();
 
     const [profileData, setProfileData] = useState<Profile>({ full_name: null, phone: null, address: null });
-    const [originalProfileData, setOriginalProfileData] = useState<Profile>({ full_name: null, phone: null, address: null }); // To revert changes
+    const [originalProfileData, setOriginalProfileData] = useState<Profile>({ full_name: null, phone: null, address: null });
     const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
     const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
 
-    // States for edit modes
     const [isProfileEditMode, setIsProfileEditMode] = useState(false);
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false); // State to control password change modal
-    const [showOrders, setShowOrders] = useState(false); // New state for showing/hiding orders
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [showOrders, setShowOrders] = useState(false);
 
-    // New states for password change
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
 
-    // Effect to determine auth loading status
+    // THAY ĐỔI MỚI: Trạng thái để kiểm soát việc hiển thị form setup/initial profile
+    const [isSetupMode, setIsSetupMode] = useState(false);
+
     useEffect(() => {
         if (user !== undefined) {
             setLoadingAuth(false);
         }
     }, [user]);
 
-    // Fetch profile data using useQuery
     const { data: fetchedProfile, isLoading: isLoadingProfile, error: profileError } = useQuery<Profile | null, Error>({
         queryKey: ['userProfile', user?.id],
         queryFn: async () => {
@@ -99,22 +93,44 @@ function ProfileContent() {
                 .select('full_name, phone, address')
                 .eq('id', user.id)
                 .single();
-            if (error) throw error;
+            if (error && error.code !== 'PGRST116') {
+                throw error;
+            }
             return data as Profile;
         },
         enabled: !!user?.id && !loadingAuth,
         staleTime: 1000 * 60 * 5,
+        refetchOnWindowFocus: false, // Ngăn không cho refetch khi tab được active lại
     });
 
-    // Effect to update profileData and originalProfileData when fetchedProfile changes
+    // THAY ĐỔI CHÍNH: Logic để xác định chế độ setup
+    useEffect(() => {
+        if (!loadingAuth && user && fetchedProfile !== undefined) {
+            if (fetchedProfile === null || !fetchedProfile.full_name || !fetchedProfile.phone || !fetchedProfile.address) {
+                setIsSetupMode(true);
+                // Nếu là chế độ setup và có dữ liệu fetchedProfile (tức là đã có record nhưng thiếu thông tin)
+                // Thì set profileData để điền sẵn vào form
+                if (fetchedProfile) {
+                    setProfileData(fetchedProfile);
+                } else {
+                    // Nếu chưa có record profile nào, set profileData rỗng để người dùng điền mới
+                    setProfileData({ full_name: '', phone: '', address: '' });
+                }
+            } else {
+                setIsSetupMode(false);
+                setProfileData(fetchedProfile);
+                setOriginalProfileData(fetchedProfile);
+            }
+        }
+    }, [loadingAuth, user, fetchedProfile]);
+
     useEffect(() => {
         if (fetchedProfile) {
             setProfileData(fetchedProfile);
-            setOriginalProfileData(fetchedProfile); // Store original for revert
+            setOriginalProfileData(fetchedProfile);
         }
     }, [fetchedProfile]);
 
-    // Fetch user orders using useQuery
     const { data: userOrders, isLoading: isLoadingOrders, error: ordersError } = useQuery<Order[], Error>({
         queryKey: ['userOrders', user?.id],
         queryFn: async () => {
@@ -144,13 +160,12 @@ function ProfileContent() {
             if (error) throw error;
             return data as unknown as Order[];
         },
-        enabled: !!user?.id && !loadingAuth,
+        enabled: !!user?.id && !loadingAuth && !isSetupMode, // Chỉ tải đơn hàng nếu không ở chế độ setup
         staleTime: 1000 * 60,
     });
 
-    // Real-time listener for order changes
     useEffect(() => {
-        if (!user?.id || loadingAuth) return;
+        if (!user?.id || loadingAuth || isSetupMode) return; // Không lắng nghe nếu đang ở chế độ setup
 
         const channel = supabaseClient
             .channel(`public:orders:user_id=eq.${user.id}`)
@@ -166,30 +181,46 @@ function ProfileContent() {
         return () => {
             supabaseClient.removeChannel(channel);
         };
-    }, [user?.id, supabaseClient, queryClient, loadingAuth]);
+    }, [user?.id, supabaseClient, queryClient, loadingAuth, isSetupMode]);
 
-    // Handle profile update
+    // Hàm cập nhật profile (dùng chung cho cả setup và edit)
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmittingProfile(true);
         setMessage(null);
 
+        if (!user) {
+            setMessage({ type: 'error', text: 'Bạn chưa đăng nhập.' });
+            setIsSubmittingProfile(false);
+            return;
+        }
+
+        // Kiểm tra các trường bắt buộc
+        if (!profileData.full_name || !profileData.phone || !profileData.address) {
+            setMessage({ type: 'error', text: 'Vui lòng điền đầy đủ Họ và tên, Số điện thoại và Địa chỉ.' });
+            setIsSubmittingProfile(false);
+            return;
+        }
+
         const { error } = await supabaseClient
             .from('profiles')
-            .upsert({ id: user?.id, ...profileData });
+            .upsert({ id: user.id, ...profileData }, { onConflict: 'id' });
 
         setIsSubmittingProfile(false);
 
         if (error) {
-            setMessage({ type: 'error', text: 'Cập nhật thông tin cá nhân thất bại: ' + error.message });
+            setMessage({ type: 'error', text: 'Lỗi lưu thông tin: ' + error.message });
         } else {
-            setMessage({ type: 'success', text: 'Thông tin cá nhân đã được cập nhật thành công!' });
-            queryClient.invalidateQueries({ queryKey: ['userProfile', user?.id] });
-            setIsProfileEditMode(false); // Exit edit mode on success
+            setMessage({ type: 'success', text: 'Thông tin cá nhân đã được lưu thành công!' });
+            queryClient.invalidateQueries({ queryKey: ['userProfile', user.id] });
+            setIsProfileEditMode(false); // Thoát khỏi chế độ chỉnh sửa
+            setIsSetupMode(false); // Thoát khỏi chế độ setup
+            // Sau khi lưu thành công trong chế độ setup, refetch fetchedProfile để cập nhật trạng thái
+            // và kích hoạt useEffect kiểm tra setupMode
+            queryClient.invalidateQueries({ queryKey: ['userProfile', user.id] });
         }
     };
 
-    // Handle password change
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmittingPassword(true);
@@ -201,7 +232,7 @@ function ProfileContent() {
             return;
         }
 
-        if (newPassword.length < 6) { // Supabase default minimum password length
+        if (newPassword.length < 6) {
             setMessage({ type: 'error', text: 'Mật khẩu phải có ít nhất 6 ký tự.' });
             setIsSubmittingPassword(false);
             return;
@@ -212,18 +243,17 @@ function ProfileContent() {
         });
 
         setIsSubmittingPassword(false);
-        setNewPassword(''); // Clear fields
-        setConfirmPassword(''); // Clear fields
+        setNewPassword('');
+        setConfirmPassword('');
 
         if (error) {
             setMessage({ type: 'error', text: 'Thay đổi mật khẩu thất bại: ' + error.message });
         } else {
             setMessage({ type: 'success', text: 'Mật khẩu đã được thay đổi thành công!' });
-            setIsPasswordModalOpen(false); // Close modal on success
+            setIsPasswordModalOpen(false);
         }
     };
 
-    // Handle order details dialog
     const handleViewOrderDetails = (order: Order) => {
         setSelectedOrder(order);
         setIsOrderDetailsDialogOpen(true);
@@ -234,15 +264,13 @@ function ProfileContent() {
         setSelectedOrder(null);
     };
 
-    // Function to close password change modal and clear fields
     const closePasswordModal = useCallback(() => {
         setIsPasswordModalOpen(false);
         setNewPassword('');
         setConfirmPassword('');
-        setMessage(null); // Clear any previous messages
+        setMessage(null);
     }, []);
 
-    // Effect to automatically hide the message after 3 seconds
     useEffect(() => {
         if (message) {
             const timer = setTimeout(() => {
@@ -259,44 +287,25 @@ function ProfileContent() {
         }
     }, [loadingAuth, user, router]);
 
-    // Function to enter profile edit mode
     const enterProfileEditMode = useCallback(() => {
         setIsProfileEditMode(true);
-        // Ensure profileData is reset to original fetched data when entering edit mode
         if (fetchedProfile) {
             setProfileData(fetchedProfile);
             setOriginalProfileData(fetchedProfile);
         }
     }, [fetchedProfile]);
 
-    // Function to cancel profile edit mode
     const cancelProfileEditMode = useCallback(() => {
         setIsProfileEditMode(false);
-        setProfileData(originalProfileData); // Revert to original data
+        setProfileData(originalProfileData);
     }, [originalProfileData]);
 
-    // Function to toggle order visibility
     const toggleOrderVisibility = useCallback(() => {
         setShowOrders(prev => !prev);
     }, []);
 
-    // Initial loading state for authentication
-    if (loadingAuth) {
-        return (
-            <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="text-lg text-gray-700">Đang kiểm tra trạng thái đăng nhập...</div>
-            </div>
-        );
-    }
-
-    // If auth check is complete and user is still null, it means not logged in.
-    // The previous useEffect will handle the redirect, but this ensures no content is rendered.
-    if (!user) {
-        return null;
-    }
-
-    // Rest of the component render
-    if (isLoadingProfile || isLoadingOrders) {
+    // Hiển thị trạng thái loading chung
+    if (loadingAuth || isLoadingProfile || fetchedProfile === undefined) {
         return (
             <div className="flex justify-center items-center h-screen bg-gray-100">
                 <div className="text-lg text-gray-700">Đang tải thông tin...</div>
@@ -304,22 +313,84 @@ function ProfileContent() {
         );
     }
 
-    if (profileError) {
+    // Nếu không có người dùng và không còn loading, sẽ chuyển hướng về login
+    if (!user) {
+        return null;
+    }
+
+    // HIỂN THỊ FORM SETUP NẾU CẦN
+    if (isSetupMode) {
         return (
             <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="text-red-500 text-lg">Lỗi tải thông tin cá nhân: {profileError.message}</div>
+                <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
+                    <h1 className="text-2xl font-bold mb-6 text-center">Hoàn tất hồ sơ cá nhân</h1>
+                    <p className="text-gray-600 mb-6 text-center">
+                        Vui lòng điền đầy đủ thông tin cá nhân để hoàn tất quá trình đăng ký.
+                    </p>
+                    {message && (
+                        <div
+                            className={`mb-4 p-3 rounded-lg text-white ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}
+                            role="alert"
+                        >
+                            {message.text}
+                        </div>
+                    )}
+                    <form onSubmit={handleUpdateProfile}> {/* Sử dụng lại handleUpdateProfile */}
+                        <div className="mb-4">
+                            <label htmlFor="full_name" className="block text-gray-700 text-sm font-bold mb-2">
+                                Họ và tên <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
+                                id="full_name"
+                                type="text"
+                                placeholder="Nhập họ và tên của bạn"
+                                value={profileData.full_name || ''}
+                                onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div className="mb-4">
+                            <label htmlFor="phone" className="block text-gray-700 text-sm font-bold mb-2">
+                                Số điện thoại <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
+                                id="phone"
+                                type="text"
+                                placeholder="Nhập số điện thoại của bạn"
+                                value={profileData.phone || ''}
+                                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <div className="mb-6">
+                            <label htmlFor="address" className="block text-gray-700 text-sm font-bold mb-2">
+                                Địa chỉ <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline min-h-[80px]"
+                                id="address"
+                                placeholder="Nhập địa chỉ của bạn (Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố)"
+                                value={profileData.address || ''}
+                                onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                                required
+                            />
+                        </div>
+                        <button
+                            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus-shadow-outline w-full ${isSubmittingProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            type="submit"
+                            disabled={isSubmittingProfile}
+                        >
+                            {isSubmittingProfile ? 'Đang lưu...' : 'Lưu thông tin'}
+                        </button>
+                    </form>
+                </div>
             </div>
         );
     }
 
-    if (ordersError) {
-        return (
-            <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="text-red-500 text-lg">Lỗi tải đơn hàng: {ordersError.message}</div>
-            </div>
-        );
-    }
-
+    // NẾU KHÔNG Ở CHẾ ĐỘ SETUP, HIỂN THỊ NỘI DUNG PROFILE CHÍNH THỨC
     return (
         <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
             <h1 className="text-4xl font-extrabold mb-8 text-center text-gray-900">Thông tin tài khoản của bạn</h1>
@@ -340,8 +411,7 @@ function ProfileContent() {
             )}
 
             {/* Action Icons Section */}
-            <div className="flex justify-center gap-8 mb-8 flex-wrap"> {/* Added flex-wrap for responsiveness */}
-                {/* Icon for Change Profile */}
+            <div className="flex justify-center gap-8 mb-8 flex-wrap">
                 <button
                     onClick={enterProfileEditMode}
                     className="flex flex-col items-center text-blue-600 hover:text-blue-800 transition-colors duration-150 p-2 rounded-lg hover:bg-blue-100"
@@ -350,7 +420,6 @@ function ProfileContent() {
                     <span className="text-sm font-semibold text-center">Thay đổi thông tin cá nhân</span>
                 </button>
 
-                {/* Icon for Change Password */}
                 <button
                     onClick={() => setIsPasswordModalOpen(true)}
                     className="flex flex-col items-center text-green-600 hover:text-green-800 transition-colors duration-150 p-2 rounded-lg hover:bg-green-100"
@@ -359,7 +428,6 @@ function ProfileContent() {
                     <span className="text-sm font-semibold text-center">Thay đổi mật khẩu</span>
                 </button>
 
-                {/* Icon for Your Orders */}
                 <button
                     onClick={toggleOrderVisibility}
                     className="flex flex-col items-center text-purple-600 hover:text-purple-800 transition-colors duration-150 p-2 rounded-lg hover:bg-purple-100"
@@ -387,7 +455,6 @@ function ProfileContent() {
                                 <p className="text-gray-600 text-sm font-semibold mb-2">Địa chỉ:</p>
                                 <p className="text-blue-700 text-xl font-bold">{profileData.address || 'Chưa cập nhật'}</p>
                             </div>
-                            {/* Removed redundant buttons here, as they are now icons above */}
                         </div>
                     ) : (
                         <form onSubmit={handleUpdateProfile}>
@@ -447,9 +514,8 @@ function ProfileContent() {
                 </div>
             </div>
 
-            {/* Order History Section - Conditional display */}
             {showOrders && (
-                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 mt-8"> {/* Added mt-8 for spacing */}
+                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 mt-8">
                     <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Lịch sử đơn hàng</h2>
                     {userOrders && userOrders.length > 0 ? (
                         <div className="overflow-x-auto">
@@ -496,7 +562,6 @@ function ProfileContent() {
                 </div>
             )}
 
-            {/* Password Change Modal */}
             {isPasswordModalOpen && (
                 <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
                     <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
@@ -544,7 +609,7 @@ function ProfileContent() {
                                 <button
                                     type="button"
                                     onClick={closePasswordModal}
-                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 w-full transition duration-150 ease-in-out"
+                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 text-base font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 w-full transition duration-150 ease-in-out"
                                 >
                                     Hủy
                                 </button>
@@ -554,7 +619,6 @@ function ProfileContent() {
                 </div>
             )}
 
-            {/* Order Details Dialog (Custom Modal) */}
             {isOrderDetailsDialogOpen && selectedOrder && (
                 <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
                     <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
@@ -611,7 +675,7 @@ function ProfileContent() {
 export default function ProfilePage() {
     return (
         <Suspense fallback={<div>Đang tải trang Profile...</div>}>
-            <Navbar /> {/* Render the imported Navbar component here */}
+            <Navbar />
             <ProfileContent />
         </Suspense>
     );

@@ -45,7 +45,7 @@ function LoginFormContent() {
       options: {
         // RẤT QUAN TRỌNG: Thay đổi URL này thành URL mà bạn muốn người dùng được chuyển hướng về
         // sau khi xác thực thành công.
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${window.location.origin}/profile/setup`,
       },
     });
 

@@ -1,30 +1,31 @@
 // app/login/page.tsx
 "use client";
-import { useState, Suspense, useEffect } from 'react'; // Import useEffect
-import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react'; // Import useUser
+import { useState, Suspense, useEffect } from 'react';
+import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-// Tạo một component riêng biệt để sử dụng useSearchParams
-// Điều này giúp tách biệt logic client-side và cho phép bọc nó trong Suspense
-function LoginForm() {
+// Component để chứa logic client-side và sử dụng useSearchParams/useUser
+function LoginFormContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabaseClient = useSupabaseClient();
   const router = useRouter();
-  const searchParams = useSearchParams(); // Lấy search params từ URL
-  const user = useUser(); // Lấy thông tin người dùng
+  const searchParams = useSearchParams();
+  const user = useUser(); // Lấy thông tin người dùng hiện tại
 
-  // THAY ĐỔI MỚI: useEffect để kiểm tra trạng thái đăng nhập
+  // useEffect để kiểm tra trạng thái đăng nhập
+  // Nếu người dùng đã đăng nhập, chuyển hướng họ đi khỏi trang login
   useEffect(() => {
     if (user) {
-      // Nếu người dùng đã đăng nhập, chuyển hướng họ đi
       const returnTo = searchParams.get('returnTo');
+      // Sử dụng router.replace để thay thế entry hiện tại trong lịch sử trình duyệt
+      // Điều này ngăn người dùng nhấn Back để quay lại trang login sau khi đã đăng nhập
       router.replace(returnTo || '/profile'); // Chuyển hướng đến /profile hoặc trang đã yêu cầu
     }
-  }, [user, router, searchParams]); // Dependency array bao gồm user, router, searchParams
+  }, [user, router, searchParams]); // Phụ thuộc vào user, router, searchParams
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,9 +49,31 @@ function LoginForm() {
     setLoading(false);
   };
 
-  // Nếu người dùng đã đăng nhập, không render form mà trả về null để không hiển thị gì
+  const handleSignInWithGoogle = async () => {
+    setLoading(true);
+    setError(null);
+
+    const { error: authError } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // Quan trọng: Sau khi OAuth, Google sẽ redirect về đây, và auth-helpers sẽ xử lý token
+        redirectTo: `https://tanshop.vercel.app/profile`,
+      },
+    });
+
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+    } else {
+      console.log(`Redirecting to Google for authentication...`);
+    }
+  };
+
+
+  // Nếu người dùng đã đăng nhập, không render form mà trả về null
+  // (hoặc một loading spinner, nếu quá trình redirect mất một chút thời gian)
   if (user) {
-    return null; // Hoặc một spinner/loading indicator nếu bạn muốn
+    return null; // Không render gì nếu người dùng đã đăng nhập và đang được redirect
   }
 
   return (
@@ -94,19 +117,39 @@ function LoginForm() {
           {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
         </button>
       </form>
+
+      {/* Nút Đăng nhập bằng Google */}
+      <div className="mt-6 text-center text-gray-500">Hoặc</div>
+      <button
+        className={`mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus-shadow-outline w-full flex items-center justify-center ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        onClick={handleSignInWithGoogle}
+        disabled={loading}
+      >
+        <img src="/google-logo.svg" alt="Google" className="h-5 w-5 mr-2" />
+        Đăng nhập bằng Google
+      </button>
+
       <p className="mt-4 text-sm text-center">
         Chưa có tài khoản? <Link href="/register" className="text-blue-500 hover:underline">Đăng ký</Link>
+      </p>
+      <p className="mt-2 text-sm text-center">
+        <Link href="/forgot-password" className="text-blue-500 hover:underline">Quên mật khẩu?</Link>
       </p>
     </div>
   );
 }
 
+// Wrapper component để bọc LoginFormContent trong Suspense
+// Điều này là cần thiết khi sử dụng useSearchParams trong một Client Component
 export default function LoginPageWrapper() {
   return (
     <div className="flex justify-center items-center h-screen bg-gray-100">
-      {/* Bọc LoginForm trong Suspense để xử lý useSearchParams */}
+      {/* Bọc LoginFormContent trong Suspense. 
+        useSearchParams yêu cầu Suspense boundary trong Next.js App Router 
+        nếu nó được sử dụng trong một Client Component không được định nghĩa là async.
+      */}
       <Suspense fallback={<div>Đang tải trang đăng nhập...</div>}>
-        <LoginForm />
+        <LoginFormContent />
       </Suspense>
     </div>
   );

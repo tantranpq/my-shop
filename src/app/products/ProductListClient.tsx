@@ -265,7 +265,7 @@ export default function ProductPageClient() {
 
     return (
         <>
-            <main className="container mx-auto p-6">
+            <main className="container mx-auto px-6 pb-6">
                 {/* Thay đổi cấu trúc div cha để chứa cả H1 và bộ lọc danh mục */}
 <div className="sticky top-16 bg-white z-10 py-4 flex justify-between items-center border-b border-gray-200 -mx-6 px-6">
     <h1 className="text-3xl font-bold text-gray-800">
@@ -276,7 +276,7 @@ export default function ProductPageClient() {
 
     {/* Phần lọc theo danh mục, nằm bên phải và căn giữa theo chiều dọc */}
     <div className="flex items-center">
-        <label htmlFor="category-select" className="mr-3 font-semibold text-gray-700 whitespace-nowrap">Lọc theo danh mục:</label>
+        <label htmlFor="category-select" className="mr-3 font-semibold text-gray-700 whitespace-nowrap">Danh mục:</label>
         <select
             id="category-select"
             className="p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"

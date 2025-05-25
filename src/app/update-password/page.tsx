@@ -3,62 +3,62 @@
 import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link'
+import Link from 'next/link'; // Import Link để sử dụng cho nút "Yêu cầu liên kết mới"
 
 export default function UpdatePasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Biến để quản lý trạng thái tải khi gửi form
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  
   const supabaseClient = useSupabaseClient();
-  const user = useUser(); // Hook để kiểm tra người dùng đã đăng nhập sau khi redirect
+  const user = useUser(); // Hook để kiểm tra người dùng đã đăng nhập sau khi redirect từ email
   const router = useRouter();
 
-  // useEffect này sẽ chạy khi component mount và khi user thay đổi
+  // useEffect này sẽ chạy khi component mount và khi user thay đổi.
   // user hook từ supabase-auth-helpers-react sẽ tự động được cập nhật
-  // khi session được thiết lập từ URL hash (sau khi nhấp vào link reset password)
+  // khi session được thiết lập từ URL hash (sau khi nhấp vào link reset password).
   useEffect(() => {
-    // Nếu người dùng không tồn tại sau khi tải trang, có thể là do token hết hạn hoặc không hợp lệ.
-    // Trong trường hợp này, chuyển hướng họ về trang login/forgot-password.
-    if (!user && !loading) { // Chỉ chuyển hướng nếu không đang trong quá trình load
-      // setTimeout(() => router.push('/login'), 3000); // Có thể thêm delay hoặc thông báo
-      // Để tránh lỗi nếu Supabase chưa kịp xác thực, có thể bỏ qua nếu bạn tin rằng auth-helpers luôn xử lý nhanh.
-      // Tuy nhiên, nếu bạn thấy người dùng bị kẹt ở đây mà không tự động đăng nhập,
-      // thì có thể xem xét chuyển hướng thủ công sau một khoảng thời gian.
-    }
+    // Nếu người dùng không tồn tại sau khi tải trang và không trong trạng thái loading,
+    // điều đó có thể chỉ ra rằng token hết hạn hoặc không hợp lệ.
+    // Trong trường hợp này, chúng ta có thể hiển thị thông báo hoặc chuyển hướng.
+    // Đối với UX tốt hơn, có thể để người dùng thấy trang "Đang kiểm tra quyền truy cập..."
+    // hoặc một form đơn giản yêu cầu lại link nếu session không được thiết lập.
+    // Logic hiện tại sẽ hiển thị form cập nhật mật khẩu nếu `user` có giá trị.
+    // Nếu `user` là null, nó sẽ hiển thị thông báo lỗi và link yêu cầu lại.
   }, [user, loading, router]); // Dependency array
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setMessage(null);
+    setLoading(true); // Bắt đầu trạng thái tải
+    setMessage(null); // Xóa thông báo cũ
 
     if (newPassword !== confirmPassword) {
       setMessage({ type: 'error', text: 'Mật khẩu mới và xác nhận mật khẩu không khớp.' });
-      setIsSubmittingPassword(false); // Sửa lỗi chính tả setIsSubmittingPassword -> setLoading
-      setLoading(false);
+      setLoading(false); // Dừng trạng thái tải
       return;
     }
 
     if (newPassword.length < 6) {
       setMessage({ type: 'error', text: 'Mật khẩu phải có ít nhất 6 ký tự.' });
-      setLoading(false);
+      setLoading(false); // Dừng trạng thái tải
       return;
     }
 
-    // `updateUser` sẽ cập nhật mật khẩu cho người dùng hiện tại đã được xác thực (qua token từ URL)
+    // `updateUser` sẽ cập nhật mật khẩu cho người dùng hiện tại
+    // (người đã được xác thực thông qua token từ URL khi truy cập trang này)
     const { error } = await supabaseClient.auth.updateUser({
       password: newPassword,
     });
 
-    setLoading(false);
+    setLoading(false); // Dừng trạng thái tải sau khi hoàn thành request
 
     if (error) {
       setMessage({ type: 'error', text: 'Lỗi cập nhật mật khẩu: ' + error.message });
     } else {
       setMessage({ type: 'success', text: 'Mật khẩu của bạn đã được cập nhật thành công!' });
-      setNewPassword('');
-      setConfirmPassword('');
+      setNewPassword(''); // Xóa trường mật khẩu
+      setConfirmPassword(''); // Xóa trường xác nhận mật khẩu
       // Chuyển hướng người dùng về trang profile hoặc trang chủ sau khi cập nhật thành công
       setTimeout(() => {
         router.push('/profile');
@@ -66,9 +66,9 @@ export default function UpdatePasswordPage() {
     }
   };
 
+  // Hiển thị một thông báo hoặc spinner trong khi chờ `useUser` xác định trạng thái
+  // Điều này xảy ra ngay khi trang tải, trước khi Supabase helpers kịp xử lý token từ URL
   if (!user && !loading) {
-    // Hiển thị một thông báo hoặc spinner trong khi chờ `useUser` xác định trạng thái
-    // Nếu vẫn không có user sau khi tải, có thể chuyển hướng lại
     return (
       <div className="flex justify-center items-center h-screen bg-gray-100">
         <div className="text-lg text-gray-700">Đang kiểm tra quyền truy cập...</div>
@@ -88,6 +88,7 @@ export default function UpdatePasswordPage() {
             {message.text}
           </div>
         )}
+        {/* Chỉ hiển thị form đặt lại mật khẩu nếu `user` đã được xác định */}
         {user ? (
           <form onSubmit={handleUpdatePassword}>
             <div className="mb-4">
@@ -127,6 +128,7 @@ export default function UpdatePasswordPage() {
             </button>
           </form>
         ) : (
+          // Hiển thị thông báo nếu người dùng không được xác thực trên trang này
           <p className="text-gray-600 text-center">
             Vui lòng sử dụng liên kết đặt lại mật khẩu từ email của bạn.
             <br />
@@ -138,8 +140,4 @@ export default function UpdatePasswordPage() {
       </div>
     </div>
   );
-}
-
-function setIsSubmittingPassword(_boolean: boolean) {
-    throw new Error('Function not implemented.');
 }

@@ -140,6 +140,6 @@ export default function UpdatePasswordPage() {
   );
 }
 
-function setIsSubmittingPassword(arg0: boolean) {
+function setIsSubmittingPassword(_arg0: boolean) {
     throw new Error('Function not implemented.');
 }

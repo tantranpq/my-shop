@@ -1,6 +1,6 @@
 // app/profile/setup/page.tsx
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query'; // Import useQueryClient

@@ -5,7 +5,10 @@ import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
+export const metadata = {
+  title: 'Profile',
+  description: 'Hồ sơ của bạn',
+};
 interface Profile {
     full_name: string | null;
     phone: string | null;

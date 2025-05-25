@@ -1,7 +1,10 @@
 import '@/app/globals.css'; 
 import Navbar from "@/components/Navbar";
 export const dynamic = "force-dynamic";
-
+export const metadata = {
+  title: 'Contact',
+  description: 'Luôn sẵn sàng hỗ trợ bạn',
+};
 export default function ContactPage() {
   return (
     <>

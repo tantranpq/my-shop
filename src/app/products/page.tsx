@@ -2,7 +2,10 @@
 import React, { Suspense } from "react";
 import Navbar from "@/components/Navbar";
 import ProductPageClient from "@/app/products/ProductListClient";
-
+export const metadata = {
+  title: 'Products',
+  description: 'Sản phẩm bạn cần ở đây',
+};
 export default function ProductsPage() {
   return (
     <>

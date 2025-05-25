@@ -1,10 +1,26 @@
 // app/layout.tsx
-import './globals.css'; // Đảm bảo bạn vẫn import global CSS của mình
-import { ClientProviders } from './ClientProviders'; // Import ClientProviders của bạn
+import './globals.css'; 
+import { ClientProviders } from './ClientProviders'; 
 
 export const metadata = {
   title: 'Tấn Shop',
   description: 'Nơi bán mọi sản phẩm bạn cần',
+  icons: {
+    icon: '/logo.svg', 
+  },
+  openGraph: {
+    images: '/logo-large.png', 
+    // images: {
+    //   url: '/logo.png',
+    //   width: 1200,
+    //   height: 630,
+    //   alt: 'Tanshop Logo',
+    // },
+  },
+  twitter: {
+    card: 'summary_large_image', 
+    images: '/logo-large.png', 
+  },
 };
 
 export default function RootLayout({

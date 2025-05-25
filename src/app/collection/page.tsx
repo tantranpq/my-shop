@@ -10,7 +10,10 @@ import { Product } from "@/types/product";
 import { useCart } from "@/context/CartContext";
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, usePathname } from 'next/navigation'; // Import useRouter
-
+export const metadata = {
+  title: 'Collection',
+  description: 'Sản phẩm yêu thích của bạn',
+};
 export default function CollectionPage() {
     const user = useUser();
     const supabaseClient = useSupabaseClient();

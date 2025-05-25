@@ -1,3 +1,4 @@
+// app/register/page.tsx
 "use client";
 import { useState } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
@@ -12,27 +13,35 @@ export default function RegisterPage() {
   const supabaseClient = useSupabaseClient();
   const router = useRouter();
 
-  const handleRegisterWithEmail = async (e: React.FormEvent) => {
+  const handleRegisterWithEmail = async (e: React.FormEvent) => { // Đổi tên hàm cho rõ ràng hơn
     e.preventDefault();
     setLoading(true);
     setError(null);
 
+    // THAY ĐỔI QUAN TRỌNG Ở ĐÂY: Thêm emailRedirectTo
     const { error: authError } = await supabaseClient.auth.signUp({
       email,
       password,
+      options: {
+        // Sau khi người dùng nhấp vào link xác nhận email, Supabase sẽ chuyển hướng về đây
+        // (tên miền gốc của ứng dụng) và sau đó auth-helpers sẽ redirect đến /profile
+        emailRedirectTo: `${window.location.origin}/profile`, 
+      },
     });
 
     if (authError) {
       setError(authError.message);
     } else {
       alert('Đăng ký thành công! Vui lòng kiểm tra email của bạn để xác nhận tài khoản.');
-      router.push('/login');
+      // Không cần router.push('/profile') ở đây nữa, vì việc redirect sẽ được xử lý bởi Supabase sau khi xác nhận email
+      // Tuy nhiên, để UX tốt hơn, bạn có thể chuyển hướng về trang chủ hoặc trang thông báo
+      // để người dùng biết là đã gửi mail.
+      router.push('/'); // Hoặc một trang /success-register
     }
 
     setLoading(false);
   };
 
-  // Chỉ giữ lại hàm cho Google
   const handleSignInWithGoogle = async () => {
     setLoading(true);
     setError(null);
@@ -40,9 +49,8 @@ export default function RegisterPage() {
     const { error: authError } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // RẤT QUAN TRỌNG: Thay đổi URL này thành URL mà bạn muốn người dùng được chuyển hướng về
-        // sau khi xác thực thành công.
-        redirectTo: `${window.location.origin}/profile/setup`,
+        // Khi đăng nhập bằng OAuth, người dùng sẽ được chuyển hướng về /profile sau khi xác thực thành công
+        redirectTo: `${window.location.origin}/profile`, 
       },
     });
 
@@ -60,8 +68,7 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-bold mb-6 text-center">Đăng ký hoặc Đăng nhập</h1>
         {error && <p className="text-red-500 mb-4">{error}</p>}
 
-        {/* Form đăng ký bằng Email/Mật khẩu */}
-        <form onSubmit={handleRegisterWithEmail}>
+        <form onSubmit={handleRegisterWithEmail}> {/* Sửa tên hàm */}
           <div className="mb-4">
             <label htmlFor="email" className="block text-gray-700 text-sm font-bold mb-2">
               Email
@@ -101,17 +108,14 @@ export default function RegisterPage() {
 
         <div className="mt-6 text-center text-gray-500">Hoặc</div>
 
-        {/* Nút đăng nhập/đăng ký bằng Google */}
         <button
           className={`mt-4 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus-shadow-outline w-full flex items-center justify-center ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-          onClick={handleSignInWithGoogle} // Gọi hàm chỉ cho Google
+          onClick={handleSignInWithGoogle}
           disabled={loading}
         >
           <img src="/google-logo.svg" alt="Google" className="h-5 w-5 mr-2" />
           Đăng nhập/Đăng ký bằng Google
         </button>
-
-        {/* Nút Facebook đã bị xóa */}
 
         <p className="mt-4 text-sm text-center">
           Đã có tài khoản? <Link href="/login" className="text-blue-500 hover:underline">Đăng nhập</Link>

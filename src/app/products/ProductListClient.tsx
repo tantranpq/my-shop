@@ -4,13 +4,14 @@ import '@/app/globals.css';
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import React, { useState, useMemo, useCallback, useEffect } from 'react'; // <-- Import useEffect
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Product } from "@/types/product";
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
 import { useUser } from '@supabase/auth-helpers-react';
 import { toast } from 'sonner';
 
+// Hàm getProducts luôn tải TẤT CẢ sản phẩm (không lọc theo category ở đây)
 async function getProducts(searchTerm: string | null): Promise<Product[]> {
     let query = supabase.from("products").select("*");
     if (searchTerm) {
@@ -37,6 +38,9 @@ export default function ProductPageClient() {
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
     const [categorySlidePages, setCategorySlidePages] = useState<Map<string, number>>(new Map());
     const [favoriteProductIds, setFavoriteProductIds] = useState<Set<string>>(new Set());
+    // State cho danh mục được chọn
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
 
     const itemsPerSlide = 8;
 
@@ -45,6 +49,7 @@ export default function ProductPageClient() {
         async function fetchInitialProducts() {
             try {
                 setLoading(true);
+                // Gọi getProducts mà không truyền selectedCategory
                 const data = await getProducts(searchTerm);
                 setProducts(data);
                 setError(null);
@@ -63,17 +68,12 @@ export default function ProductPageClient() {
 
         // Đăng ký lắng nghe thay đổi Realtime
         const channel = supabase
-            .channel('products_changes') // Tên kênh, có thể là bất kỳ tên nào
+            .channel('products_changes')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'products' }, // Lắng nghe tất cả sự kiện trên bảng 'products'
+                { event: '*', schema: 'public', table: 'products' },
                 (payload) => {
                     console.log('Realtime change received!', payload);
-                    // Cập nhật lại danh sách sản phẩm khi có thay đổi
-                    // Tùy thuộc vào 'payload.eventType', bạn có thể xử lý chi tiết hơn
-                    // Ví dụ: thêm sản phẩm mới, cập nhật sản phẩm hiện có, xóa sản phẩm
-                    // Để đơn giản và đảm bảo đồng bộ, ta fetch lại toàn bộ dữ liệu.
-                    // Với lượng dữ liệu lớn, bạn có thể cân nhắc xử lý payload để tối ưu.
                     fetchInitialProducts();
                 }
             )
@@ -83,7 +83,7 @@ export default function ProductPageClient() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [searchTerm]); // Re-subscribe khi searchTerm thay đổi
+    }, [searchTerm]); // Chỉ re-subscribe khi searchTerm thay đổi
 
     const fetchFavorites = useCallback(async () => {
         if (user) {
@@ -204,9 +204,16 @@ export default function ProductPageClient() {
         });
     };
 
+    // Điều chỉnh groupedProducts để lọc sản phẩm sau khi đã tải TẤT CẢ
     const groupedProducts = useMemo(() => {
         const groups: { [key: string]: Product[] } = {};
-        products.forEach(product => {
+
+        // Lọc sản phẩm ở đây dựa trên selectedCategory
+        const productsToGroup = selectedCategory
+            ? products.filter(p => p.category === selectedCategory)
+            : products;
+
+        productsToGroup.forEach(product => {
             const categoryName: string = (typeof product.category === 'string' && product.category !== '')
                 ? product.category
                 : 'Chưa phân loại';
@@ -226,6 +233,17 @@ export default function ProductPageClient() {
             categoryName: category,
             products: groups[category]
         }));
+    }, [products, selectedCategory]); // Thêm selectedCategory vào dependencies
+
+    // Lấy danh sách các danh mục duy nhất từ TẤT CẢ sản phẩm (không bị ảnh hưởng bởi selectedCategory)
+    const uniqueCategories = useMemo(() => {
+        const categories = new Set<string>();
+        products.forEach(product => {
+            if (product.category && typeof product.category === 'string') {
+                categories.add(product.category);
+            }
+        });
+        return Array.from(categories).sort();
     }, [products]);
 
 
@@ -248,14 +266,39 @@ export default function ProductPageClient() {
     return (
         <>
             <main className="container mx-auto p-6">
-                <h1 className="text-3xl font-bold mb-8 text-center text-gray-800">
-                    {searchTerm
-                        ? `Kết quả tìm kiếm cho '${searchTerm}'`
-                        : "Tất cả Sản phẩm"}
-                </h1>
+                {/* Thay đổi cấu trúc div cha để chứa cả H1 và bộ lọc danh mục */}
+<div className="sticky top-16 bg-white z-10 py-4 flex justify-between items-center border-b border-gray-200 -mx-6 px-6">
+    <h1 className="text-3xl font-bold text-gray-800">
+        {searchTerm
+            ? `Kết quả tìm kiếm cho '${searchTerm}'`
+            : "Tất cả Sản phẩm"}
+    </h1>
+
+    {/* Phần lọc theo danh mục, nằm bên phải và căn giữa theo chiều dọc */}
+    <div className="flex items-center">
+        <label htmlFor="category-select" className="mr-3 font-semibold text-gray-700 whitespace-nowrap">Lọc theo danh mục:</label>
+        <select
+            id="category-select"
+            className="p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
+            value={selectedCategory || ""}
+            onChange={(e) => setSelectedCategory(e.target.value === "" ? null : e.target.value)}
+        >
+            <option value="">Tất cả danh mục</option>
+            {uniqueCategories.map(category => (
+                <option key={category} value={category}>{category}</option>
+            ))}
+        </select>
+    </div>
+    {/* Kết thúc phần lọc theo danh mục */}
+</div>
 
                 {groupedProducts.length > 0 ? (
                     groupedProducts.map((group) => {
+                        // Chỉ render nhóm nếu có sản phẩm sau khi lọc
+                        if (group.products.length === 0) {
+                            return null;
+                        }
+
                         const currentSlide = categorySlidePages.get(group.categoryName) || 0;
                         const totalSlides = Math.ceil(group.products.length / itemsPerSlide);
                         const productsToShow = group.products.slice(

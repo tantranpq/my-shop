@@ -271,7 +271,7 @@ export default function ProductPageClient() {
     <h1 className="text-3xl font-bold text-gray-800">
         {searchTerm
             ? `Kết quả tìm kiếm cho '${searchTerm}'`
-            : "Tất cả Sản phẩm"}
+            : ""}
     </h1>
 
     {/* Phần lọc theo danh mục, nằm bên phải và căn giữa theo chiều dọc */}

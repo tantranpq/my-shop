@@ -25,7 +25,7 @@ export default function RegisterPage() {
       options: {
         // Sau khi người dùng nhấp vào link xác nhận email, Supabase sẽ chuyển hướng về đây
         // (tên miền gốc của ứng dụng) và sau đó auth-helpers sẽ redirect đến /profile
-        emailRedirectTo: `${window.location.origin}/profile`, 
+        emailRedirectTo: `https://tanshop.vercel.app/profile`, 
       },
     });
 
@@ -50,7 +50,7 @@ export default function RegisterPage() {
       provider: 'google',
       options: {
         // Khi đăng nhập bằng OAuth, người dùng sẽ được chuyển hướng về /profile sau khi xác thực thành công
-        redirectTo: `${window.location.origin}/profile`, 
+        redirectTo: `https://tanshop.vercel.app/profile`, 
       },
     });
 

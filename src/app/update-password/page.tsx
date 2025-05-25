@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import Link from 'next/link'
 
 export default function UpdatePasswordPage() {
   const [newPassword, setNewPassword] = useState('');
@@ -140,6 +140,6 @@ export default function UpdatePasswordPage() {
   );
 }
 
-function setIsSubmittingPassword(_arg0: boolean) {
+function setIsSubmittingPassword(_boolean: boolean) {
     throw new Error('Function not implemented.');
 }

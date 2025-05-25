@@ -84,7 +84,7 @@ function ProfileContent() {
         }
     }, [user]);
 
-    const { data: fetchedProfile, isLoading: isLoadingProfile, error: profileError } = useQuery<Profile | null, Error>({
+    const { data: fetchedProfile, isLoading: isLoadingProfile } = useQuery<Profile | null, Error>({
         queryKey: ['userProfile', user?.id],
         queryFn: async () => {
             if (!user?.id) return null;
@@ -131,7 +131,7 @@ function ProfileContent() {
         }
     }, [fetchedProfile]);
 
-    const { data: userOrders, isLoading: isLoadingOrders, error: ordersError } = useQuery<Order[], Error>({
+    const { data: userOrders } = useQuery<Order[], Error>({
         queryKey: ['userOrders', user?.id],
         queryFn: async () => {
             if (!user?.id) return [];

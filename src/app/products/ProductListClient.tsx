@@ -338,7 +338,7 @@ export default function ProductPageClient() {
                         return (
                             <div key={group.categoryName} className="mb-10">
                                 <div className="flex justify-between items-center mb-6 border-b-2 border-gray-200 pb-2">
-                                    <h2 className="text-2xl font-semibold text-gray-700">
+                                    <h2 className="text-2xl font-semibold text-gray-700 bg-blue-200 rounded-lg px-4">
                                         {group.categoryName}
                                     </h2>
                                     <button
@@ -360,7 +360,7 @@ export default function ProductPageClient() {
                                             <div
                                                 id={`products-in-${group.categoryName.replace(/\s+/g, '-')}`}
                                                 // Thay đổi ở đây: giữ nguyên grid-cols-2 và thêm các breakpoint khác
-                                                className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
+                                                className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
                                             >
                                                 {productsToShow.map((product) => {
                                                     const isOutOfStock = product.stock_quantity <= 0;
@@ -399,7 +399,7 @@ export default function ProductPageClient() {
                                                                 )}
                                                             </span>
 
-                                                            <div className="p-5 flex-grow flex flex-col">
+                                                            <div className="p-3 flex-grow flex flex-col">
                                                                 <h3 className="text-base sm:text-xl font-bold mb-2">
                                                                     <Link href={`/products/${product.slug}`} className="text-gray-900 hover:text-blue-600 transition-colors">
                                                                         {product.name}

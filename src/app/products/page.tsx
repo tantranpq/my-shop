@@ -10,7 +10,7 @@ export default function ProductsPage() {
   return (
     <>
       <Navbar />
-      <main className="max-w-6xl mx-auto px-6 pb-6">
+      <main className="max-w-6xl mx-auto px-3 pb-3">
         <Suspense fallback={<p>Đang tải sản phẩm...</p>}>
           <ProductPageClient />
         </Suspense>

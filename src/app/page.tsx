@@ -33,6 +33,14 @@ export interface Product {
   updated_at: string;
 }
 
+// Định nghĩa props interface cho các mũi tên tùy chỉnh
+// Đây là kiểu props mà react-slick truyền vào custom arrow components
+interface CustomArrowProps {
+  className?: string;
+  style?: React.CSSProperties; // Sử dụng React.CSSProperties để có kiểu cho style object
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
+}
+
 // Danh sách các ảnh cho Hero Slider (STATICALLY DEFINED)
 const heroImages = [
   {
@@ -59,7 +67,7 @@ const heroImages = [
 ];
 
 // Custom Arrow Components (Mũi tên điều hướng cho slider)
-const CustomPrevArrow = (props: any) => {
+const CustomPrevArrow = (props: CustomArrowProps) => { // <-- Thay đổi 'any' thành CustomArrowProps
   const { className, style, onClick } = props;
   return (
     <div
@@ -83,7 +91,7 @@ const CustomPrevArrow = (props: any) => {
   );
 };
 
-const CustomNextArrow = (props: any) => {
+const CustomNextArrow = (props: CustomArrowProps) => { // <-- Thay đổi 'any' thành CustomArrowProps
   const { className, style, onClick } = props;
   return (
     <div
@@ -125,12 +133,13 @@ export default function Home() {
   ];
 
   useEffect(() => {
+      // Hàm fetchData sẽ chỉ chạy một lần khi component được mount
       const fetchData = async () => {
           setLoading(true);
           setError(null);
 
           // 1. Cố gắng tải dữ liệu từ localStorage
-          if (typeof window !== 'undefined') { // Kiểm tra nếu đang chạy ở phía client
+          if (typeof window !== 'undefined') {
               const cachedData = localStorage.getItem(CACHE_KEY);
               if (cachedData) {
                   try {
@@ -207,7 +216,7 @@ export default function Home() {
                   console.log("Dữ liệu mới đã được fetch và lưu vào cache.");
               }
 
-          } catch (err: any) {
+          } catch (err: any) { // Có thể vẫn chấp nhận 'any' ở đây cho lỗi chung nếu bạn muốn đơn giản hóa
               console.error("Overall error in fetchData:", err);
               setError("Không thể tải dữ liệu trang chủ. Vui lòng thử lại sau.");
           } finally {
@@ -216,7 +225,7 @@ export default function Home() {
       };
 
       fetchData();
-  }, []); // Mảng rỗng đảm bảo useEffect chỉ chạy MỘT LẦN khi component mount
+  }, []); // <-- Mảng rỗng đảm bảo useEffect chỉ chạy MỘT LẦN khi component mount
 
   // Cấu hình cho Hero Slider chính
   const heroSliderSettings = {
@@ -231,7 +240,7 @@ export default function Home() {
     arrows: true,
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
-    appendDots: (dots: any) => (
+    appendDots: (dots: any) => ( // 'dots: any' ở đây là do cấu trúc của react-slick, thường được chấp nhận
         <div style={{ position: "absolute", bottom: "20px", width: "100%", textAlign: "center", zIndex: 60 }}>
             <ul style={{ margin: "0px" }}> {dots} </ul>
         </div>

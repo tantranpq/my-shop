@@ -1,0 +1,10 @@
+# .browserslistrc
+defaults
+not IE 11
+# Thêm các trình duyệt cũ hơn mà bạn muốn hỗ trợ
+# Ví dụ: covers iOS 9-12 for Safari
+iOS >= 9
+last 2 versions
+not dead
+> 0.2%
+Safari >= 9

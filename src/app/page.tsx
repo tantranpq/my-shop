@@ -252,7 +252,7 @@ export default function Home() {
             <ul style={{ margin: "0px" }}> {dots} </ul>
         </div>
     ),
-    customPaging: (_i: number) => (
+    customPaging: () => (
         <div className="w-3 h-3 rounded-full bg-white bg-opacity-50 hover:bg-opacity-80 transition-all duration-300 mx-1"></div>
     )
   };

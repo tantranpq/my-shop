@@ -293,7 +293,7 @@ export default function ProductPageClient() {
 
     return (
         <>
-            <main className="container mx-auto px-6 pb-6">
+            <main className="container mx-auto">
                 {/* Thay đổi cấu trúc div cha để chứa cả H1 và bộ lọc danh mục */}
                 <div className="sticky top-16 bg-white z-10 py-4 flex justify-between items-center border-b border-gray-200 -mx-6 px-6">
                     <h1 className="text-3xl font-bold text-gray-800">

@@ -151,3 +151,10 @@
 .slick-slide .absolute.inset-0.bg-black\/40 {
     z-index: 15 !important; /* Cao hơn ảnh (z-index của ảnh là 1) nhưng thấp hơn nút và chấm (z-index 60) */
 }
+/* Nhắm mục tiêu mũi tên trong các slider có lớp 'relative w-full pt-full' (banner nhỏ) */
+@media (max-width: 767px) { /* Cho màn hình nhỏ hơn breakpoint 'md' của Tailwind */
+  .relative.w-full.pt-full .slick-prev,
+  .relative.w-full.pt-full .slick-next {
+    display: none !important; /* Quan trọng: Ghi đè bất kỳ display nào khác */
+  }
+}

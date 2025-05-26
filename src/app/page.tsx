@@ -1,5 +1,6 @@
 // src/app/page.tsx
 "use client";
+
 import { useState, useEffect } from 'react';
 import '@/app/globals.css';
 import Navbar from "@/components/Navbar";
@@ -7,26 +8,18 @@ import Link from 'next/link';
 import Slider from 'react-slick';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { supabase } from '@/lib/supabase';
-import React from 'react'; // Import React để sử dụng React.CSSProperties và React.ReactNode
+import React from 'react';
 
-// Đảm bảo bạn đã cài đặt react-slick và slick-carousel:
-// npm install react-slick slick-carousel
-// npm install @types/react-slick (nếu dùng TypeScript)
+// --- Interfaces và Hằng Số ---
 
-// Và import CSS của slick vào file global.css của bạn, ví dụ:
-// @import "slick-carousel/slick/slick.css";
-// @import "slick-carousel/slick/slick-theme.css";
-
-
-// Định nghĩa Product interface
 export interface Product {
   id: string;
   name: string;
   slug: string;
   description: string;
   price: number;
-  image: string; // Ảnh đại diện chính
-  images: string[] | null; // Ảnh phụ (dùng cho trang chi tiết sản phẩm, không dùng cho slider này)
+  image: string;
+  images: string[] | null;
   stock_quantity: number;
   category: string;
   is_featured?: boolean;
@@ -34,15 +27,12 @@ export interface Product {
   updated_at: string;
 }
 
-// Định nghĩa props interface cho các mũi tên tùy chỉnh
-// Đây là kiểu props mà react-slick truyền vào custom arrow components
 interface CustomArrowProps {
   className?: string;
-  style?: React.CSSProperties; // Sử dụng React.CSSProperties để có kiểu cho style object
+  style?: React.CSSProperties;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
-// Danh sách các ảnh cho Hero Slider (STATICALLY DEFINED)
 const heroImages = [
   {
     src: "/banner-1.jpg",
@@ -67,7 +57,11 @@ const heroImages = [
   }
 ];
 
-// Custom Arrow Components (Mũi tên điều hướng cho slider)
+const CACHE_KEY = 'homePageData';
+const CACHE_EXPIRATION_TIME = 3600 * 1000; // 1 giờ
+
+// --- Custom Arrow Components ---
+
 const CustomPrevArrow = (props: CustomArrowProps) => {
   const { className, style, onClick } = props;
   return (
@@ -75,13 +69,13 @@ const CustomPrevArrow = (props: CustomArrowProps) => {
       className={`${className} custom-slick-arrow slick-prev`}
       style={{
         ...style,
-        left: "10px", // Vị trí từ lề trái
+        left: "10px",
         zIndex: 10,
-        backgroundColor: "rgba(0,0,0,0.5)", // Nền đen trong suốt
+        backgroundColor: "rgba(0,0,0,0.5)",
         borderRadius: "50%",
         padding: "10px",
         cursor: "pointer",
-        display: "flex", // Sử dụng flex để căn giữa icon
+        display: "flex",
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -99,13 +93,13 @@ const CustomNextArrow = (props: CustomArrowProps) => {
       className={`${className} custom-slick-arrow slick-next`}
       style={{
         ...style,
-        right: "10px", // Vị trí từ lề phải
+        right: "10px",
         zIndex: 10,
-        backgroundColor: "rgba(0,0,0,0.5)", // Nền đen trong suốt
+        backgroundColor: "rgba(0,0,0,0.5)",
         borderRadius: "50%",
         padding: "10px",
         cursor: "pointer",
-        display: "flex", // Sử dụng flex để căn giữa icon
+        display: "flex",
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -116,17 +110,15 @@ const CustomNextArrow = (props: CustomArrowProps) => {
   );
 };
 
-// Định nghĩa khóa và thời gian hết hạn cho cache (ví dụ: 1 giờ = 3600 * 1000 ms)
-const CACHE_KEY = 'homePageData';
-const CACHE_EXPIRATION_TIME = 3600 * 1000; // 1 giờ
+// --- Home Component Chính ---
 
 export default function Home() {
   const [smallCategoryProducts, setSmallCategoryProducts] = useState<{ [key: string]: Product[] }>({});
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Định nghĩa các category bạn muốn hiển thị và tiêu đề của chúng
   const categorySections = [
     { key: 'computer', title: 'Laptop Gaming' },
     { key: 'clothing', title: 'PC Gaming' },
@@ -134,37 +126,44 @@ export default function Home() {
   ];
 
   useEffect(() => {
-      // Hàm fetchData sẽ chỉ chạy một lần khi component được mount
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768); // breakpoint 'md' của Tailwind
+    };
+
+    handleResize(); // Đặt trạng thái ban đầu
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
       const fetchData = async () => {
           setLoading(true);
           setError(null);
 
-          // 1. Cố gắng tải dữ liệu từ localStorage
           if (typeof window !== 'undefined') {
               const cachedData = localStorage.getItem(CACHE_KEY);
               if (cachedData) {
                   try {
                       const { timestamp, smallCategoryProducts: cachedSmallCategory, featuredProducts: cachedFeatured } = JSON.parse(cachedData);
-
-                      // Kiểm tra thời gian hết hạn của cache
                       if (Date.now() - timestamp < CACHE_EXPIRATION_TIME) {
                           setSmallCategoryProducts(cachedSmallCategory);
                           setFeaturedProducts(cachedFeatured);
                           setLoading(false);
                           console.log("Dữ liệu đã được tải từ cache!");
-                          return; // Thoát hàm nếu dữ liệu hợp lệ từ cache
+                          return;
                       } else {
                           console.log("Cache đã hết hạn, đang fetch dữ liệu mới...");
-                          localStorage.removeItem(CACHE_KEY); // Xóa cache cũ
+                          localStorage.removeItem(CACHE_KEY);
                       }
                   } catch (e) {
                       console.error("Lỗi khi đọc hoặc phân tích cú pháp cache:", e);
-                      localStorage.removeItem(CACHE_KEY); // Xóa cache lỗi
+                      localStorage.removeItem(CACHE_KEY);
                   }
               }
           }
 
-          // 2. Nếu không có cache hoặc cache đã hết hạn, fetch dữ liệu từ Supabase
           try {
               const categoriesToFetch = categorySections.map(s => s.key);
               const categoryProductMap: { [key: string]: Product[] } = {};
@@ -207,7 +206,6 @@ export default function Home() {
               })) as Product[];
               setFeaturedProducts(processedFeatured);
 
-              // 3. Lưu dữ liệu mới vào localStorage
               if (typeof window !== 'undefined') {
                   const dataToCache = {
                       timestamp: Date.now(),
@@ -218,9 +216,8 @@ export default function Home() {
                   console.log("Dữ liệu mới đã được fetch và lưu vào cache.");
               }
 
-          } catch (error: unknown) { // <-- Đã thay đổi từ 'any' sang 'unknown'
+          } catch (error: unknown) {
               console.error("Overall error in fetchData:", error);
-              // Kiểm tra kiểu của error để hiển thị thông báo phù hợp
               if (error instanceof Error) {
                 setError(`Không thể tải dữ liệu trang chủ: ${error.message}. Vui lòng thử lại sau.`);
               } else {
@@ -232,7 +229,7 @@ export default function Home() {
       };
 
       fetchData();
-  }, []); // <-- Mảng rỗng đảm bảo useEffect chỉ chạy MỘT LẦN khi component mount
+  }, []);
 
   // Cấu hình cho Hero Slider chính
   const heroSliderSettings = {
@@ -244,20 +241,20 @@ export default function Home() {
     autoplay: true,
     autoplaySpeed: 5000,
     fade: true,
-    arrows: true,
+    arrows: !isMobile, // Hiển thị mũi tên chỉ khi không phải mobile
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
-    appendDots: (dots: React.ReactNode[]) => ( // <-- Đã thay đổi từ 'any' sang React.ReactNode[]
+    appendDots: (dots: React.ReactNode[]) => (
         <div style={{ position: "absolute", bottom: "20px", width: "100%", textAlign: "center", zIndex: 60 }}>
             <ul style={{ margin: "0px" }}> {dots} </ul>
         </div>
     ),
-    customPaging: () => (
+    customPaging: (i: number) => (
         <div className="w-3 h-3 rounded-full bg-white bg-opacity-50 hover:bg-opacity-80 transition-all duration-300 mx-1"></div>
     )
   };
 
-  // Cấu hình cho các Slider sản phẩm bên trong các banner nhỏ (Mỗi slide 1 sản phẩm)
+  // Cấu hình cho các Slider sản phẩm bên trong các banner nhỏ
   const smallProductCarouselSettings = {
     dots: false,
     infinite: true,
@@ -266,13 +263,12 @@ export default function Home() {
     slidesToScroll: 1,
     autoplay: true,
     autoplaySpeed: 3000,
-    arrows: true,
+    arrows: !isMobile, // Ẩn mũi tên trên mobile
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     fade: true,
   };
 
-  // Hiển thị hiệu ứng loading nếu dữ liệu đang tải
   if (loading) {
       return (
           <div className="flex flex-col justify-center items-center min-h-screen bg-gray-100">
@@ -282,7 +278,6 @@ export default function Home() {
       );
   }
 
-  // Hiển thị thông báo lỗi nếu có lỗi
   if (error) {
       return (
           <div className="flex justify-center items-center min-h-screen bg-gray-100">
@@ -297,7 +292,7 @@ export default function Home() {
       <div className="max-w-[1300px] mx-auto px-4 bg-white">
         <main className="min-h-screen">
 
-          {/* Hero Section (Slider chính) */}
+          {/* Hero Section (Slider chính của trang chủ) */}
           <section className="relative my-4 rounded-xl overflow-hidden shadow-lg">
             <div className="relative w-full pt-[56.25%]">
               <Slider {...heroSliderSettings}>
@@ -310,13 +305,13 @@ export default function Home() {
                       loading="eager"
                     />
                     <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center p-4 text-white">
-                      <h2 className="text-4xl md:text-6xl font-bold mb-4 leading-tight text-center">
+                      <h2 className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl font-bold mb-2 sm:mb-4 leading-tight text-center">
                         {image.title}
                       </h2>
-                      <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto text-center">
+                      <p className="text-sm sm:text-lg md:text-xl lg:text-2xl mb-4 sm:mb-8 max-w-3xl mx-auto text-center">
                         {image.description}
                       </p>
-                      <Link href={image.link} className="bg-white text-gray-800 px-8 py-3 rounded-full text-lg font-semibold hover:bg-gray-200 transition duration-300 shadow-lg inline-block">
+                      <Link href={image.link} className="bg-white text-gray-800 px-6 py-2 sm:px-8 sm:py-3 rounded-full text-sm sm:text-lg font-semibold hover:bg-gray-200 transition duration-300 shadow-lg inline-block">
                         Khám phá ngay
                       </Link>
                     </div>
@@ -326,34 +321,44 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Section chứa các Banner nhỏ theo Category (kiểu lưới 2x2) */}
-          <section className="py-16">
-            <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm theo danh mục</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Section chứa các Banner nhỏ theo Category */}
+          <section className="py-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm theo danh mục</h2>
+            <div className="flex flex-wrap -mx-2 sm:-mx-4">
               {categorySections.map((sectionConfig) => (
                 smallCategoryProducts[sectionConfig.key] && smallCategoryProducts[sectionConfig.key].length > 0 && (
-                  <div key={sectionConfig.key} className="relative rounded-xl overflow-hidden shadow-lg group bg-gray-100 flex flex-col">
-                      <h3 className="text-2xl font-bold text-center pt-6 pb-2 text-gray-800">{sectionConfig.title}</h3>
-                      <div className="relative w-full pt-[75%] flex-grow">
-                          <Slider {...smallProductCarouselSettings}>
-                              {smallCategoryProducts[sectionConfig.key].map((product) => (
-                                <Link key={product.id} href={`/products/${product.slug}`} className="block relative w-full h-full">
-                                    <img
-                                        src={product.image}
-                                        alt={product.name}
-                                        className="absolute inset-0 w-full h-full object-cover"
-                                    />
-                                    <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-end text-white p-4 pb-8 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                        <h4 className="text-2xl font-bold text-center mb-2">{product.name}</h4>
-                                        <p className="text-lg text-center mb-2">{product.price.toLocaleString('vi-VN')} VNĐ</p>
-                                        <span className="bg-white text-gray-800 px-4 py-2 rounded-full text-sm font-semibold hover:bg-gray-200 transition duration-300">
-                                          Xem chi tiết
-                                        </span>
-                                    </div>
-                                </Link>
-                              ))}
-                          </Slider>
-                      </div>
+                  <div key={sectionConfig.key} className="w-1/2 px-2 sm:px-4 mb-4 sm:mb-8">
+                    <div className="relative rounded-xl overflow-hidden shadow-lg group bg-gray-100 flex flex-col h-full">
+                        <h3 className="text-base sm:text-xl font-bold text-center pt-2 pb-1 text-gray-800">
+                          {sectionConfig.title}
+                        </h3>
+                        <div className="relative w-full pt-[calc(100%*3/4)] md:pt-[75%] flex-grow">
+                            <Slider {...smallProductCarouselSettings}>
+                                {smallCategoryProducts[sectionConfig.key].map((product) => (
+                                  <Link key={product.id} href={`/products/${product.slug}`} className="block relative w-full h-full">
+                                      <img
+                                          src={product.image}
+                                          alt={product.name}
+                                          className="absolute inset-0 w-full h-full object-contain bg-gray-200"
+                                      />
+                                      <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-end text-white
+                                                        p-1 pb-2 md:p-2 md:pb-4 opacity-100 md:opacity-0 md:group-hover:opacity-100
+                                                        transition-opacity duration-300">
+                                          <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5">
+                                            {product.name}
+                                          </h4>
+                                          <p className="text-[10px] sm:text-base text-center mb-1">
+                                            {product.price.toLocaleString('vi-VN')} VNĐ
+                                          </p>
+                                          <span className="bg-white text-gray-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-xs font-semibold hover:bg-gray-200 transition duration-300 inline-block">
+                                            Xem chi tiết
+                                          </span>
+                                      </div>
+                                  </Link>
+                                ))}
+                            </Slider>
+                        </div>
+                    </div>
                   </div>
                 )
               ))}
@@ -362,17 +367,18 @@ export default function Home() {
 
           {/* Section Sản phẩm nổi bật */}
           {featuredProducts.length > 0 && (
-              <section className="py-16">
-                  <h2 className="text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm nổi bật của chúng tôi</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              <section className="py-8">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm nổi bật của chúng tôi</h2>
+                  {/* Thay đổi grid-cols-1 thành grid-cols-2 để hiển thị 2 sản phẩm trên mobile */}
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8"> {/* Giảm gap cho mobile */}
                       {featuredProducts.map((product) => (
                           <div key={product.id} className="bg-gray-100 rounded-lg shadow-md overflow-hidden">
-                              <img src={product.image} alt={product.name} className="w-full h-64 object-cover"/>
-                              <div className="p-6">
-                                  <h3 className="font-bold text-xl mb-2 text-gray-800">{product.name}</h3>
-                                  <p className="text-gray-600">{product.description}</p>
-                                  <p className="text-gray-900 font-semibold mt-2">{product.price.toLocaleString('vi-VN')} VNĐ</p>
-                                  <Link href={`/products/${product.slug}`} className="mt-4 inline-block text-blue-600 hover:underline">Xem chi tiết</Link>
+                              <img src={product.image} alt={product.name} className="w-full h-40 sm:h-64 object-cover"/> {/* Giảm chiều cao ảnh trên mobile */}
+                              <div className="p-2 sm:p-6"> {/* Giảm padding trên mobile */}
+                                  <h3 className="font-bold text-sm sm:text-xl mb-1 sm:mb-2 text-gray-800 leading-tight">{product.name}</h3> {/* Giảm font, mb và leading */}
+                                  <p className="text-xs sm:text-base text-gray-600 line-clamp-2">{product.description}</p> {/* Giảm font, giới hạn dòng */}
+                                  <p className="text-sm sm:text-lg text-gray-900 font-semibold mt-1 sm:mt-2">{product.price.toLocaleString('vi-VN')} VNĐ</p> {/* Giảm font, mt */}
+                                  <Link href={`/products/${product.slug}`} className="mt-2 inline-block text-blue-600 hover:underline text-xs sm:text-base">Xem chi tiết</Link> {/* Giảm font, mt */}
                               </div>
                           </div>
                       ))}

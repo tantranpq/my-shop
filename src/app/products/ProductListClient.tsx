@@ -41,8 +41,36 @@ export default function ProductPageClient() {
     // State cho danh mục được chọn
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+    // --- THÊM STATE VÀ EFFECT ĐỂ THEO DÕI KÍCH THƯỚC MÀN HÌNH ---
+    const [windowWidth, setWindowWidth] = useState(0);
 
-    const itemsPerSlide = 8;
+    useEffect(() => {
+        const handleResize = () => {
+            setWindowWidth(window.innerWidth);
+        };
+
+        setWindowWidth(window.innerWidth); // Thiết lập giá trị ban đầu
+
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+        };
+    }, []);
+
+    // --- TÍNH TOÁN itemsPerSlide DỰA TRÊN KÍCH THƯỚC MÀN HÌNH ---
+    const itemsPerSlide = useMemo(() => {
+        if (windowWidth >= 1024) { // lg và lớn hơn (ví dụ 4 cột, muốn 8 sản phẩm -> 2 hàng)
+            return 8;
+        } else if (windowWidth >= 768) { // md (ví dụ 3 cột, muốn 6 sản phẩm -> 2 hàng)
+            return 6;
+        } else if (windowWidth >= 640) { // sm (ví dụ 2 cột, muốn 4 sản phẩm -> 2 hàng)
+            return 4;
+        } else { // dưới sm (mobile) (2 cột, muốn 4 sản phẩm -> 2 hàng)
+            return 4;
+        }
+    }, [windowWidth]);
+
 
     // --- EFFECT ĐỂ FETCH SẢN PHẨM LẦN ĐẦU & REALTIME SUBSCRIPTION ---
     useEffect(() => {
@@ -267,30 +295,30 @@ export default function ProductPageClient() {
         <>
             <main className="container mx-auto px-6 pb-6">
                 {/* Thay đổi cấu trúc div cha để chứa cả H1 và bộ lọc danh mục */}
-<div className="sticky top-16 bg-white z-10 py-4 flex justify-between items-center border-b border-gray-200 -mx-6 px-6">
-    <h1 className="text-3xl font-bold text-gray-800">
-        {searchTerm
-            ? `Kết quả tìm kiếm cho '${searchTerm}'`
-            : ""}
-    </h1>
+                <div className="sticky top-16 bg-white z-10 py-4 flex justify-between items-center border-b border-gray-200 -mx-6 px-6">
+                    <h1 className="text-3xl font-bold text-gray-800">
+                        {searchTerm
+                            ? `Kết quả tìm kiếm cho '${searchTerm}'`
+                            : ""}
+                    </h1>
 
-    {/* Phần lọc theo danh mục, nằm bên phải và căn giữa theo chiều dọc */}
-    <div className="flex items-center">
-        <label htmlFor="category-select" className="mr-3 font-semibold text-gray-700 whitespace-nowrap">Danh mục:</label>
-        <select
-            id="category-select"
-            className="p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
-            value={selectedCategory || ""}
-            onChange={(e) => setSelectedCategory(e.target.value === "" ? null : e.target.value)}
-        >
-            <option value="">Tất cả danh mục</option>
-            {uniqueCategories.map(category => (
-                <option key={category} value={category}>{category}</option>
-            ))}
-        </select>
-    </div>
-    {/* Kết thúc phần lọc theo danh mục */}
-</div>
+                    {/* Phần lọc theo danh mục, nằm bên phải và căn giữa theo chiều dọc */}
+                    <div className="flex items-center">
+                        <label htmlFor="category-select" className="mr-3 font-semibold text-gray-700 whitespace-nowrap">Danh mục:</label>
+                        <select
+                            id="category-select"
+                            className="p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[150px]"
+                            value={selectedCategory || ""}
+                            onChange={(e) => setSelectedCategory(e.target.value === "" ? null : e.target.value)}
+                        >
+                            <option value="">Tất cả danh mục</option>
+                            {uniqueCategories.map(category => (
+                                <option key={category} value={category}>{category}</option>
+                            ))}
+                        </select>
+                    </div>
+                    {/* Kết thúc phần lọc theo danh mục */}
+                </div>
 
                 {groupedProducts.length > 0 ? (
                     groupedProducts.map((group) => {
@@ -300,6 +328,7 @@ export default function ProductPageClient() {
                         }
 
                         const currentSlide = categorySlidePages.get(group.categoryName) || 0;
+                        // totalSlides và productsToShow sẽ tự động cập nhật theo itemsPerSlide
                         const totalSlides = Math.ceil(group.products.length / itemsPerSlide);
                         const productsToShow = group.products.slice(
                             currentSlide * itemsPerSlide,
@@ -326,104 +355,108 @@ export default function ProductPageClient() {
                                     </button>
                                 </div>
                                 {!collapsedCategories.has(group.categoryName) && (
-                                    <div className="relative">
-                                        <div
-                                            id={`products-in-${group.categoryName.replace(/\s+/g, '-')}`}
-                                            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
-                                        >
-                                            {productsToShow.map((product) => {
-                                                const isOutOfStock = product.stock_quantity <= 0;
-                                                return (
-                                                <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-105 relative">
-                                                    <Link href={`/products/${product.slug}`} className="block">
-                                                        <img
-                                                            src={product.image || '/not-found.png'}
-                                                            alt={product.name}
-                                                            width={400}
-                                                            height={300}
-                                                            className="w-full h-48 object-cover"
-                                                        />
-                                                    </Link>
-                                                    <button
-                                                        onClick={() => handleToggleFavorite(product)}
-                                                        className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md text-red-500 hover:scale-110 transition-transform z-20"
-                                                        aria-label={favoriteProductIds.has(product.id) ? "Xóa khỏi yêu thích" : "Thêm vào yêu thích"}
-                                                    >
-                                                        <Heart fill={favoriteProductIds.has(product.id) ? "currentColor" : "none"} className="h-6 w-6" />
-                                                    </button>
-
-                                                    <span className={`absolute top-2 left-2 text-white text-xs font-bold rounded-full px-2 py-1 flex items-center justify-center min-w-[50px] h-[24px] z-10 ${isOutOfStock
-                                                        ? 'bg-red-600'
-                                                        : product.stock_quantity < 10
-                                                            ? 'bg-yellow-500'
-                                                            : 'bg-green-600'
-                                                        }`
-                                                    }>
-                                                        {isOutOfStock ? (
-                                                            'Hết hàng'
-                                                        ) : product.stock_quantity < 10 ? (
-                                                            `còn ${product.stock_quantity} SP`
-                                                        ) : (
-                                                            'Còn hàng'
-                                                        )}
-                                                    </span>
-
-                                                    <div className="p-5 flex-grow flex flex-col">
-                                                        <h3 className="text-xl font-bold mb-2">
-                                                            <Link href={`/products/${product.slug}`} className="text-gray-900 hover:text-blue-600 transition-colors">
-                                                                {product.name}
+                                    <> {/* Thêm Fragment để bọc lại các phần tử */}
+                                        <div className="relative"> {/* Giữ nguyên div này cho grid sản phẩm */}
+                                            <div
+                                                id={`products-in-${group.categoryName.replace(/\s+/g, '-')}`}
+                                                // Thay đổi ở đây: giữ nguyên grid-cols-2 và thêm các breakpoint khác
+                                                className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
+                                            >
+                                                {productsToShow.map((product) => {
+                                                    const isOutOfStock = product.stock_quantity <= 0;
+                                                    return (
+                                                        <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-105 relative">
+                                                            <Link href={`/products/${product.slug}`} className="block">
+                                                                <img
+                                                                    src={product.image || '/not-found.png'}
+                                                                    alt={product.name}
+                                                                    width={400}
+                                                                    height={300}
+                                                                    className="w-full h-48 object-cover"
+                                                                />
                                                             </Link>
-                                                        </h3>
-                                                        <p className="text-red-600 font-semibold mb-3 text-lg">
-                                                            {product.price.toLocaleString('vi-VN')} <sup className="underline">đ</sup>
-                                                        </p>
-                                                        <div className="flex space-x-2 mt-auto">
                                                             <button
-                                                                className={`flex-1 bg-blue-100 text-blue-700 px-3 py-2 text-sm rounded-lg font-medium shadow-md transition-colors duration-200
-                                                                    ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-200 text-gray-500' : 'hover:bg-blue-200'}`}
-                                                                onClick={() => handleAddToCart(product)}
-                                                                disabled={isOutOfStock}
+                                                                onClick={() => handleToggleFavorite(product)}
+                                                                className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md text-red-500 hover:scale-110 transition-transform z-20"
+                                                                aria-label={favoriteProductIds.has(product.id) ? "Xóa khỏi yêu thích" : "Thêm vào yêu thích"}
                                                             >
-                                                                Thêm vào giỏ hàng
+                                                                <Heart fill={favoriteProductIds.has(product.id) ? "currentColor" : "none"} className="h-6 w-6" />
                                                             </button>
-                                                            <button
-                                                                className={`flex-1 bg-green-100 text-green-700 px-3 py-2 text-sm rounded-lg font-medium shadow-md transition-colors duration-200
-                                                                    ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-200 text-gray-500' : 'hover:bg-green-200'}`}
-                                                                onClick={() => handleBuyNow(product)}
-                                                                disabled={isOutOfStock}
-                                                            >
-                                                                Mua ngay
-                                                            </button>
+
+                                                            <span className={`absolute top-2 left-2 text-white text-xs font-bold rounded-full px-2 py-1 flex items-center justify-center min-w-[50px] h-[24px] z-10 ${isOutOfStock
+                                                                ? 'bg-red-600'
+                                                                : product.stock_quantity < 10
+                                                                    ? 'bg-yellow-500'
+                                                                    : 'bg-green-600'
+                                                                }`
+                                                            }>
+                                                                {isOutOfStock ? (
+                                                                    'Hết hàng'
+                                                                ) : product.stock_quantity < 10 ? (
+                                                                    `còn ${product.stock_quantity} SP`
+                                                                ) : (
+                                                                    'Còn hàng'
+                                                                )}
+                                                            </span>
+
+                                                            <div className="p-5 flex-grow flex flex-col">
+                                                                <h3 className="text-base sm:text-xl font-bold mb-2">
+                                                                    <Link href={`/products/${product.slug}`} className="text-gray-900 hover:text-blue-600 transition-colors">
+                                                                        {product.name}
+                                                                    </Link>
+                                                                </h3>
+                                                                <p className="text-red-600 font-semibold mb-3 text-base sm:text-lg">
+                                                                    {product.price.toLocaleString('vi-VN')} <sup className="underline">đ</sup>
+                                                                </p>
+                                                                <div className="flex flex-col space-y-2 sm:flex-row sm:space-x-2 sm:space-y-0 mt-auto">
+                                                                    <button
+                                                                        className={`bg-blue-100 text-blue-700 px-2 py-2 text-xs sm:px-3 sm:py-2 sm:text-sm rounded-lg font-medium shadow-md transition-colors duration-200
+                                                                            ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-200 text-gray-500' : 'hover:bg-blue-200'} w-full`}
+                                                                        onClick={() => handleAddToCart(product)}
+                                                                        disabled={isOutOfStock}
+                                                                    >
+                                                                        Thêm vào giỏ hàng
+                                                                    </button>
+                                                                    <button
+                                                                        className={`bg-green-100 text-green-700 px-2 py-2 text-xs sm:px-3 sm:py-2 sm:text-sm rounded-lg font-medium shadow-md transition-colors duration-200
+                                                                            ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-200 text-gray-500' : 'hover:bg-green-200'} w-full`}
+                                                                        onClick={() => handleBuyNow(product)}
+                                                                        disabled={isOutOfStock}
+                                                                    >
+                                                                        Mua ngay
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                            })}
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
+
                                         {totalSlides > 1 && (
-                                            <>
+                                            <div className="flex justify-center items-center mt-4 space-x-2">
                                                 <button
                                                     onClick={() => handlePrevSlide(group.categoryName)}
                                                     disabled={currentSlide === 0}
-                                                    className="absolute left-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-gray-800 bg-opacity-50 text-white hover:bg-opacity-75 transition-colors z-10 disabled:opacity-30 disabled:cursor-not-allowed ml-2"
+                                                    className="p-2 rounded-full bg-gray-800 bg-opacity-50 text-white hover:bg-opacity-75 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                                 >
-                                                    <ChevronLeft className="h-8 w-8" />
+                                                    <ChevronLeft className="h-6 w-6 sm:h-8 sm:w-8" />
                                                 </button>
+
+                                                <span className="text-sm text-gray-600">
+                                                    {currentSlide + 1} / {totalSlides}
+                                                </span>
+
                                                 <button
                                                     onClick={() => handleNextSlide(group.categoryName, totalSlides)}
                                                     disabled={currentSlide === totalSlides - 1}
-                                                    className="absolute right-0 top-1/2 -translate-y-1/2 p-2 rounded-full bg-gray-800 bg-opacity-50 text-white hover:bg-opacity-75 transition-colors z-10 disabled:opacity-30 disabled:cursor-not-allowed mr-2"
+                                                    className="p-2 rounded-full bg-gray-800 bg-opacity-50 text-white hover:bg-opacity-75 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                                 >
-                                                    <ChevronRight className="h-8 w-8" />
+                                                    <ChevronRight className="h-6 w-6 sm:h-8 sm:w-8" />
                                                 </button>
-                                                <div className="flex justify-center items-center mt-4 space-x-2">
-                                                    <span className="text-sm text-gray-600">
-                                                        {currentSlide + 1} / {totalSlides}
-                                                    </span>
-                                                </div>
-                                            </>
+                                            </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
                             </div>
                         );

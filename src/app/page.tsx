@@ -323,7 +323,7 @@ export default function Home() {
 
           {/* Section chứa các Banner nhỏ theo Category */}
           <section className="py-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm theo danh mục</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Các danh mục hàng đầu</h2>
             <div className="flex flex-wrap -mx-2 sm:-mx-4">
               {categorySections.map((sectionConfig) => (
                 smallCategoryProducts[sectionConfig.key] && smallCategoryProducts[sectionConfig.key].length > 0 && (
@@ -370,7 +370,7 @@ export default function Home() {
           {/* Section Sản phẩm nổi bật */}
           {featuredProducts.length > 0 && (
               <section className="py-8">
-                  <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm nổi bật của chúng tôi</h2>
+                  <h2 className="text-2xl sm:text-3xl font-bold text-center mb-12 text-gray-800">Sản phẩm được yêu thích</h2>
                   {/* Thay đổi grid-cols-1 thành grid-cols-2 để hiển thị 2 sản phẩm trên mobile */}
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8"> {/* Giảm gap cho mobile */}
                       {featuredProducts.map((product) => (

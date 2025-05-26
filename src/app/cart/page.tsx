@@ -27,8 +27,19 @@ export default function CartPage() {
     <>
       <Navbar />
       <main className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Giỏ hàng của bạn</h1>
+  <div className="flex justify-between items-center mb-4">
+    {/* Tiêu đề nằm bên trái */}
+    <h1 className="text-2xl font-bold">Giỏ hàng của bạn</h1>
 
+    {/* Nút "Xóa toàn bộ" nằm bên phải */}
+    <button
+      className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
+      onClick={clearCart}
+      disabled={cart.length === 0}
+    >
+      Xóa toàn bộ
+    </button>
+  </div>
         {cart.length === 0 ? (
           <p>Giỏ hàng trống.</p>
         ) : (
@@ -94,8 +105,34 @@ export default function CartPage() {
               </div>
             ))}
 
-            {/* Định dạng tổng tiền */}
-            <p className="text-lg font-bold mt-4">Tổng cộng: {total.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
+            {cart.length > 0 && (
+  <div className="mt-4 flex justify-between items-center gap-2">
+    {/* Tổng cộng nằm bên trái */}
+    <p className="text-lg font-bold">Tổng cộng: {total.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
+
+    {/* Hai nút checkbox nằm bên phải */}
+    <div className="flex justify-end gap-2">
+      <button
+        type="button"
+        className="text-sm text-gray-600 hover:underline"
+        onClick={() => setSelectedItems(cart.map((item) => item.slug))}
+        disabled={cart.length === 0}
+      >
+        Chọn tất cả
+      </button>
+      <button
+        type="button"
+        className="text-sm text-gray-600 hover:underline"
+        onClick={() => setSelectedItems([])}
+        disabled={selectedItems.length === 0}
+      >
+        Bỏ chọn tất cả
+      </button>
+    </div>
+  </div>
+)}
+
+
 
             {!user ? (
               <p className="mt-4">
@@ -121,38 +158,13 @@ export default function CartPage() {
               </Link>
             )}
 
-            {cart.length > 0 && (
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="text-sm text-gray-600 hover:underline"
-                  onClick={() => setSelectedItems(cart.map((item) => item.slug))}
-                  disabled={cart.length === 0}
-                >
-                  Chọn tất cả
-                </button>
-                <button
-                  type="button"
-                  className="text-sm text-gray-600 hover:underline"
-                  onClick={() => setSelectedItems([])}
-                  disabled={selectedItems.length === 0}
-                >
-                  Bỏ chọn tất cả
-                </button>
-              </div>
-            )}
+            
 
-            <button
-              className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 mt-4 rounded"
-              onClick={clearCart}
-              disabled={cart.length === 0}
-            >
-              Xóa toàn bộ
-            </button>
+
           </div>
         )}
 
-        <Link href="/products" className="text-blue-500 mt-4 block hover:underline">
+        <Link href="/products" className="text-blue-500 mt-4 block hover:underline text-center">
           ← Tiếp tục mua sắm
         </Link>
       </main>

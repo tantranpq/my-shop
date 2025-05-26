@@ -397,7 +397,7 @@ function ProfileContent() {
 
             {message && (
                 <div
-                    className={`fixed top-6 right-6 p-4 rounded-lg shadow-xl text-white z-50 transition-opacity duration-300 ease-in-out
+                    className={`fixed top-6 right-6 p-4 rounded-lg shadow-xl text-white z-80 transition-opacity duration-300 ease-in-out
                         ${message.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}
                     role="alert"
                 >
@@ -563,7 +563,7 @@ function ProfileContent() {
             )}
 
             {isPasswordModalOpen && (
-                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-80 p-4">
                     <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
                         <div className="flex justify-between items-center mb-6 border-b pb-4">
                             <h2 className="text-2xl font-bold text-gray-800">Thay đổi mật khẩu</h2>
@@ -620,7 +620,7 @@ function ProfileContent() {
             )}
 
             {isOrderDetailsDialogOpen && selectedOrder && (
-                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-80 p-4">
                     <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
                         <div className="flex justify-between items-center mb-6 border-b pb-4">
                             <h2 className="text-2xl font-bold text-gray-800">Chi tiết đơn hàng <span className="font-mono text-gray-600">#{selectedOrder.id.substring(selectedOrder.id.length - 10)}</span></h2>
@@ -631,7 +631,7 @@ function ProfileContent() {
                         <div className="mb-6 text-gray-700 space-y-2">
                             <p><strong>Ngày đặt:</strong> {new Date(selectedOrder.created_at).toLocaleString('vi-VN')}</p>
                             <p><strong>Tổng tiền:</strong> <span className="font-semibold text-green-700">{selectedOrder.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</span></p>
-                            <p><strong>Trạng thái thanh toán:</strong> <span className="font-semibold">{translatePaymentStatus(selectedOrder.payment_status)}</span></p>
+                            <p><strong>Trạng thái:</strong> <span className="font-semibold">{translatePaymentStatus(selectedOrder.payment_status)}</span></p>
                             {selectedOrder.expires_at && (
                                 <p><strong>Ngày hết hạn:</strong> {new Date(selectedOrder.expires_at).toLocaleString('vi-VN')}</p>
                             )}

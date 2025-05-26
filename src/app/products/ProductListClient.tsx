@@ -337,8 +337,8 @@ export default function ProductPageClient() {
 
                         return (
                             <div key={group.categoryName} className="mb-10">
-                                <div className="flex justify-between items-center mb-6 border-b-2 border-gray-200 pb-2">
-                                    <h2 className="text-2xl font-semibold text-gray-700 bg-blue-200 rounded-lg px-4">
+                                <div className="flex justify-between items-center mb-6 border-b-2 border-gray-200 pb-2 mt-2 bg-gray-200 rounded-lg px-4">
+                                    <h2 className="text-2xl font-semibold text-gray-700">
                                         {group.categoryName}
                                     </h2>
                                     <button

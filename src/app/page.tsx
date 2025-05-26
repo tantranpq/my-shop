@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Slider from 'react-slick';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { supabase } from '@/lib/supabase';
+import React from 'react'; // Import React để sử dụng React.CSSProperties và React.ReactNode
 
 // Đảm bảo bạn đã cài đặt react-slick và slick-carousel:
 // npm install react-slick slick-carousel
@@ -67,20 +68,20 @@ const heroImages = [
 ];
 
 // Custom Arrow Components (Mũi tên điều hướng cho slider)
-const CustomPrevArrow = (props: CustomArrowProps) => { // <-- Thay đổi 'any' thành CustomArrowProps
+const CustomPrevArrow = (props: CustomArrowProps) => {
   const { className, style, onClick } = props;
   return (
     <div
       className={`${className} custom-slick-arrow slick-prev`}
       style={{
         ...style,
-        left: "10px",
+        left: "10px", // Vị trí từ lề trái
         zIndex: 10,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.5)", // Nền đen trong suốt
         borderRadius: "50%",
         padding: "10px",
         cursor: "pointer",
-        display: "flex",
+        display: "flex", // Sử dụng flex để căn giữa icon
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -91,20 +92,20 @@ const CustomPrevArrow = (props: CustomArrowProps) => { // <-- Thay đổi 'any' 
   );
 };
 
-const CustomNextArrow = (props: CustomArrowProps) => { // <-- Thay đổi 'any' thành CustomArrowProps
+const CustomNextArrow = (props: CustomArrowProps) => {
   const { className, style, onClick } = props;
   return (
     <div
       className={`${className} custom-slick-arrow slick-next`}
       style={{
         ...style,
-        right: "10px",
+        right: "10px", // Vị trí từ lề phải
         zIndex: 10,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: "rgba(0,0,0,0.5)", // Nền đen trong suốt
         borderRadius: "50%",
         padding: "10px",
         cursor: "pointer",
-        display: "flex",
+        display: "flex", // Sử dụng flex để căn giữa icon
         alignItems: "center",
         justifyContent: "center",
       }}
@@ -154,6 +155,7 @@ export default function Home() {
                           return; // Thoát hàm nếu dữ liệu hợp lệ từ cache
                       } else {
                           console.log("Cache đã hết hạn, đang fetch dữ liệu mới...");
+                          localStorage.removeItem(CACHE_KEY); // Xóa cache cũ
                       }
                   } catch (e) {
                       console.error("Lỗi khi đọc hoặc phân tích cú pháp cache:", e);
@@ -216,9 +218,14 @@ export default function Home() {
                   console.log("Dữ liệu mới đã được fetch và lưu vào cache.");
               }
 
-          } catch (err: any) { // Có thể vẫn chấp nhận 'any' ở đây cho lỗi chung nếu bạn muốn đơn giản hóa
-              console.error("Overall error in fetchData:", err);
-              setError("Không thể tải dữ liệu trang chủ. Vui lòng thử lại sau.");
+          } catch (error: unknown) { // <-- Đã thay đổi từ 'any' sang 'unknown'
+              console.error("Overall error in fetchData:", error);
+              // Kiểm tra kiểu của error để hiển thị thông báo phù hợp
+              if (error instanceof Error) {
+                setError(`Không thể tải dữ liệu trang chủ: ${error.message}. Vui lòng thử lại sau.`);
+              } else {
+                setError("Không thể tải dữ liệu trang chủ. Vui lòng thử lại sau.");
+              }
           } finally {
               setLoading(false);
           }
@@ -240,7 +247,7 @@ export default function Home() {
     arrows: true,
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
-    appendDots: (dots: any) => ( // 'dots: any' ở đây là do cấu trúc của react-slick, thường được chấp nhận
+    appendDots: (dots: React.ReactNode[]) => ( // <-- Đã thay đổi từ 'any' sang React.ReactNode[]
         <div style={{ position: "absolute", bottom: "20px", width: "100%", textAlign: "center", zIndex: 60 }}>
             <ul style={{ margin: "0px" }}> {dots} </ul>
         </div>

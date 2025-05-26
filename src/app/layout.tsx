@@ -1,6 +1,7 @@
 // app/layout.tsx
 import './globals.css'; 
 import { ClientProviders } from './ClientProviders'; 
+import { Toaster } from 'sonner';
 
 export const metadata = {
   title: 'Tấn Shop',
@@ -38,6 +39,7 @@ export default function RootLayout({
       </head>
       <body>
         <ClientProviders>
+          <Toaster position="top-right" richColors />
           {children}
         </ClientProviders>
       </body>

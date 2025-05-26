@@ -70,7 +70,7 @@
     padding: 0 !important;
     margin: 0 !important;
     list-style: none !important;
-    z-index: 60 !important; /* Z-index cao hơn Navbar nếu cần */
+    z-index: 40 !important; /* Z-index cao hơn Navbar nếu cần */
 }
 
 .slick-dots li {

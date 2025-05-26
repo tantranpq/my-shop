@@ -356,7 +356,7 @@ export default function ProductPageClient() {
                                 </div>
                                 {!collapsedCategories.has(group.categoryName) && (
                                     <> {/* Thêm Fragment để bọc lại các phần tử */}
-                                        <div className="relative"> {/* Giữ nguyên div này cho grid sản phẩm */}
+                                        <div className="relative"> 
                                             <div
                                                 id={`products-in-${group.categoryName.replace(/\s+/g, '-')}`}
                                                 // Thay đổi ở đây: giữ nguyên grid-cols-2 và thêm các breakpoint khác

@@ -245,7 +245,7 @@ export default function Home() {
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     appendDots: (dots: React.ReactNode[]) => (
-        <div style={{ position: "absolute", bottom: "20px", width: "100%", textAlign: "center", zIndex: 60 }}>
+        <div style={{ position: "absolute", bottom: "5px", width: "100%", textAlign: "center", zIndex: 60 }}>
             <ul style={{ margin: "0px" }}> {dots} </ul>
         </div>
     ),
@@ -341,19 +341,21 @@ export default function Home() {
                                           alt={product.name}
                                           className="absolute inset-0 w-full h-full object-contain bg-gray-200"
                                       />
-                                      <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-end text-white
-                                                        p-1 pb-2 md:p-2 md:pb-4 opacity-100 md:opacity-0 md:group-hover:opacity-100
-                                                        transition-opacity duration-300">
-                                          <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5">
-                                            {product.name}
-                                          </h4>
-                                          <p className="text-[10px] sm:text-base text-center mb-1">
-                                            {product.price.toLocaleString('vi-VN')} VNĐ
-                                          </p>
-                                          <span className="bg-white text-gray-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-xs font-semibold hover:bg-gray-200 transition duration-300 inline-block">
-                                            Xem chi tiết
-                                          </span>
-                                      </div>
+<div className="absolute inset-0 bg-transparent md:bg-black/60 flex flex-col items-center justify-end text-gray-900
+                        p-1 pb-1 md:p-2 md:pb-4 opacity-100 md:opacity-0 md:group-hover:opacity-100
+                        transition-opacity duration-300">
+    <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5
+                   bg-orange-300 py-0.5 px-1 rounded"> {/* Vẫn giữ nền vàng cam cho tên sản phẩm */}
+      {product.name}
+    </h4>
+    <p className="text-[10px] sm:text-base text-center mb-1
+                  text-red-600 font-bold bg-white"> {/* Bỏ bg-orange-300, py-0.5, px-1, rounded ở đây. Chỉ giữ text-red-600 */}
+      {product.price.toLocaleString('vi-VN')} VNĐ
+    </p>
+    {/* <span className="bg-white text-gray-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-xs font-semibold hover:bg-gray-200 transition duration-300 inline-block">
+      Xem chi tiết
+    </span> */}
+</div>
                                   </Link>
                                 ))}
                             </Slider>

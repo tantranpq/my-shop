@@ -117,7 +117,8 @@ export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false); // Đổi tên biến này cho rõ nghĩa hơn nếu cần, hoặc điều chỉnh ngưỡng.
+  // Thay đổi: Thay vì isMobile, chúng ta sẽ dùng isTouchDevice để kiểm soát mũi tên
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   const categorySections = [
     { key: 'computer', title: 'Laptop Gaming' },
@@ -125,18 +126,25 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    const handleResize = () => {
-      // Thay đổi ngưỡng breakpoint cho isMobile lên 1024px
-      // Điều này sẽ ẩn mũi tên trên cả mobile và hầu hết các iPad (kể cả ở chế độ ngang)
-      setIsMobile(window.innerWidth < 1024);
+    const detectTouchDevice = () => {
+      // Cách 1: Kiểm tra navigator.maxTouchPoints
+      // Đây là cách hiện đại và được khuyến nghị
+      const hasMaxTouchPoints = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
+
+      // Cách 2: Kiểm tra sự kiện 'ontouchstart' (cách cũ hơn, nhưng vẫn hữu ích)
+      const hasOntouchstart = typeof window !== 'undefined' && 'ontouchstart' in window;
+
+      // Nếu một trong hai điều kiện đúng, coi đây là thiết bị cảm ứng
+      setIsTouchDevice(hasMaxTouchPoints || hasOntouchstart);
     };
 
-    handleResize(); // Đặt trạng thái ban đầu
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+    detectTouchDevice(); // Đặt trạng thái ban đầu
+
+    // Có thể không cần lắng nghe sự kiện resize cho isTouchDevice vì nó ít thay đổi hơn
+    // Nhưng nếu bạn muốn đảm bảo lại, có thể thêm lắng nghe sự kiện 'orientationchange'
+    // hoặc gọi lại detectTouchDevice() định kỳ nếu cần (ít khi).
+    // Tuy nhiên, việc phát hiện cảm ứng thường chỉ cần chạy một lần khi component mount.
+  }, []); // Chạy một lần khi component mount
 
   useEffect(() => {
       const fetchData = async () => {
@@ -242,7 +250,8 @@ export default function Home() {
     autoplay: true,
     autoplaySpeed: 5000,
     fade: true,
-    arrows: !isMobile, // Hiển thị mũi tên chỉ khi không phải mobile/tablet (theo ngưỡng isMobile mới)
+    // Thay đổi: Ẩn mũi tên nếu là thiết bị cảm ứng
+    arrows: !isTouchDevice,
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     appendDots: (dots: React.ReactNode[]) => (
@@ -264,7 +273,8 @@ export default function Home() {
     slidesToScroll: 1,
     autoplay: true,
     autoplaySpeed: 3000,
-    arrows: !isMobile, // Ẩn mũi tên trên mobile/tablet (theo ngưỡng isMobile mới)
+    // Thay đổi: Ẩn mũi tên nếu là thiết bị cảm ứng
+    arrows: !isTouchDevice,
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     fade: true,
@@ -342,10 +352,10 @@ export default function Home() {
                                           alt={product.name}
                                           className="absolute inset-0 w-full h-full object-contain bg-gray-200"
                                       />
-                                      {/* Thay đổi ở đây để kiểm soát hiển thị overlay và hover */}
+                                      {/* Thay đổi: Dùng isTouchDevice để quyết định hiển thị overlay và hover */}
                                       <div className={`absolute inset-0 bg-transparent flex flex-col items-center justify-end text-gray-900
                                                               p-1 pb-1 md:p-2 md:pb-4 transition-opacity duration-300
-                                                              ${isMobile ? 'opacity-100' : 'md:bg-black/60 md:opacity-0 md:group-hover:opacity-100'}`}>
+                                                              ${isTouchDevice ? 'opacity-100' : 'md:bg-black/60 md:opacity-0 md:group-hover:opacity-100'}`}>
                                           <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5
                                                          bg-orange-300 py-0.5 px-1 rounded">
                                             {product.name}

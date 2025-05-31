@@ -387,7 +387,7 @@ export default function Home() {
                               <img src={product.image} alt={product.name} className="w-full h-40 sm:h-64 object-cover"/> {/* Giảm chiều cao ảnh trên mobile */}
                               <div className="p-2 sm:p-6"> {/* Giảm padding trên mobile */}
                                   <h3 className="font-bold text-sm sm:text-xl mb-1 sm:mb-2 text-gray-800 leading-tight">{product.name}</h3> {/* Giảm font, mb và leading */}
-                                  <p className="text-xs sm:text-base text-gray-600 line-clamp-2">{product.description}</p> {/* Giảm font, giới hạn dòng */}
+                                  {/* <p className="text-xs sm:text-base text-gray-600 line-clamp-2">{product.description}</p>  */}
                                   <p className="text-sm sm:text-lg text-gray-900 font-semibold mt-1 sm:mt-2">{product.price.toLocaleString('vi-VN')} VNĐ</p> {/* Giảm font, mt */}
                                   <Link href={`/products/${product.slug}`} className="mt-2 inline-block text-blue-600 hover:underline text-xs sm:text-base">Xem chi tiết</Link> {/* Giảm font, mt */}
                               </div>

@@ -117,17 +117,18 @@ export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(false); // Đổi tên biến này cho rõ nghĩa hơn nếu cần, hoặc điều chỉnh ngưỡng.
 
   const categorySections = [
     { key: 'computer', title: 'Laptop Gaming' },
     { key: 'clothing', title: 'PC Gaming' },
-
   ];
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768); // breakpoint 'md' của Tailwind
+      // Thay đổi ngưỡng breakpoint cho isMobile lên 1024px
+      // Điều này sẽ ẩn mũi tên trên cả mobile và hầu hết các iPad (kể cả ở chế độ ngang)
+      setIsMobile(window.innerWidth < 1024);
     };
 
     handleResize(); // Đặt trạng thái ban đầu
@@ -241,7 +242,7 @@ export default function Home() {
     autoplay: true,
     autoplaySpeed: 5000,
     fade: true,
-    arrows: !isMobile, // Hiển thị mũi tên chỉ khi không phải mobile
+    arrows: !isMobile, // Hiển thị mũi tên chỉ khi không phải mobile/tablet (theo ngưỡng isMobile mới)
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     appendDots: (dots: React.ReactNode[]) => (
@@ -263,7 +264,7 @@ export default function Home() {
     slidesToScroll: 1,
     autoplay: true,
     autoplaySpeed: 3000,
-    arrows: !isMobile, // Ẩn mũi tên trên mobile
+    arrows: !isMobile, // Ẩn mũi tên trên mobile/tablet (theo ngưỡng isMobile mới)
     prevArrow: <CustomPrevArrow />,
     nextArrow: <CustomNextArrow />,
     fade: true,
@@ -341,21 +342,19 @@ export default function Home() {
                                           alt={product.name}
                                           className="absolute inset-0 w-full h-full object-contain bg-gray-200"
                                       />
-<div className="absolute inset-0 bg-transparent md:bg-black/60 flex flex-col items-center justify-end text-gray-900
-                        p-1 pb-1 md:p-2 md:pb-4 opacity-100 md:opacity-0 md:group-hover:opacity-100
-                        transition-opacity duration-300">
-    <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5
-                   bg-orange-300 py-0.5 px-1 rounded"> {/* Vẫn giữ nền vàng cam cho tên sản phẩm */}
-      {product.name}
-    </h4>
-    <p className="text-[10px] sm:text-base text-center mb-1
-                  text-red-600 font-bold bg-white"> {/* Bỏ bg-orange-300, py-0.5, px-1, rounded ở đây. Chỉ giữ text-red-600 */}
-      {product.price.toLocaleString('vi-VN')} VNĐ
-    </p>
-    {/* <span className="bg-white text-gray-800 px-1.5 py-0.5 rounded-full text-[9px] sm:text-xs font-semibold hover:bg-gray-200 transition duration-300 inline-block">
-      Xem chi tiết
-    </span> */}
-</div>
+                                      {/* Thay đổi ở đây để kiểm soát hiển thị overlay và hover */}
+                                      <div className={`absolute inset-0 bg-transparent flex flex-col items-center justify-end text-gray-900
+                                                              p-1 pb-1 md:p-2 md:pb-4 transition-opacity duration-300
+                                                              ${isMobile ? 'opacity-100' : 'md:bg-black/60 md:opacity-0 md:group-hover:opacity-100'}`}>
+                                          <h4 className="text-xs sm:text-lg font-bold text-center leading-tight mb-0.5
+                                                         bg-orange-300 py-0.5 px-1 rounded">
+                                            {product.name}
+                                          </h4>
+                                          <p className="text-[10px] sm:text-base text-center mb-1
+                                                        text-red-600 font-bold bg-white">
+                                            {product.price.toLocaleString('vi-VN')} VNĐ
+                                          </p>
+                                      </div>
                                   </Link>
                                 ))}
                             </Slider>

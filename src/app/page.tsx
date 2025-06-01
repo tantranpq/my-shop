@@ -36,24 +36,24 @@ interface CustomArrowProps {
 const heroImages = [
   {
     src: "/banner-1.jpg",
-    alt: "Laptop Gaming Hiệu Năng Vượt Trội",
-    title: "Sức Mạnh Tuyệt Đối",
-    description: "Trải nghiệm chơi game đỉnh cao với các mẫu laptop gaming mới nhất.",
-    link: "/products/gaming-laptop"
+    alt: "Không gian bếp đầy đủ tiện ích",
+    title: "Cần Là Có",
+    description: "Các sản phẩm nhà bếp tiện dụng và thân thiện",
+    link: "/products/"
   },
   {
     src: "/banner-2.jpg",
-    alt: "Xây Dựng Cỗ Máy Mơ Ước",
-    title: "PC Gaming Tùy Chỉnh Đỉnh Cao",
-    description: "PC gaming được lắp ráp tùy chỉnh, tối ưu cho mọi tựa game.",
-    link: "/products/pc-gaming"
+    alt: "Nhà thông minh",
+    title: "Vật Dụng Thiết Yếu",
+    description: "Biến căn nhà tiện nghi hơn nhờ sản phẩm tiện ích",
+    link: "/products/"
   },
   {
     src: "/banner-3.jpg",
-    alt: "Hoàn Thiện Bộ Gear Của Bạn",
-    title: "Phụ Kiện Gaming Độc Đáo",
-    description: "Khám phá chuột, bàn phím, tai nghe và nhiều phụ kiện gaming khác.",
-    link: "/products/accessories"
+    alt: "Văn phòng phẩm",
+    title: "Phụ Kiện Văn Phòng Độc Đáo",
+    description: "Cùng các bé cắp sách đến trường",
+    link: "/products/"
   }
 ];
 
@@ -121,8 +121,8 @@ export default function Home() {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   const categorySections = [
-    { key: 'computer', title: 'Laptop Gaming' },
-    { key: 'clothing', title: 'PC Gaming' },
+    { key: 'Nhà bếp', title: 'Nhà Bếp' },
+    { key: 'Văn phòng phẩm', title: 'Văn Phòng Phẩm' },
   ];
 
   useEffect(() => {

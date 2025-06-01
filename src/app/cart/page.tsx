@@ -13,7 +13,13 @@ export default function CartPage() {
   const userObject = useUser();
   const user = userObject as User | null;
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = cart.reduce((sum, item) => {
+    // Chỉ cộng dồn nếu sản phẩm có trong danh sách selectedItems
+    if (selectedItems.includes(item.slug)) {
+      return sum + item.price * item.quantity;
+    }
+    return sum;
+  }, 0);
   const pathname = usePathname();
   // Tạo chuỗi truy vấn cho các sản phẩm đã chọn, bao gồm cả số lượng
   const checkoutQueryItems = selectedItems.map(slug => {
@@ -32,13 +38,15 @@ export default function CartPage() {
     <h1 className="text-2xl font-bold">Giỏ hàng của bạn</h1>
 
     {/* Nút "Xóa toàn bộ" nằm bên phải */}
-    <button
-      className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
-      onClick={clearCart}
-      disabled={cart.length === 0}
-    >
-      Xóa toàn bộ
-    </button>
+    {cart.length > 0 && (
+  <button
+    className="bg-gray-500 hover:bg-gray-700 text-white px-4 py-2 rounded"
+    onClick={clearCart}
+    disabled={cart.length === 0}
+  >
+    Xóa toàn bộ
+  </button>
+)}
   </div>
         {cart.length === 0 ? (
           <p>Giỏ hàng trống.</p>

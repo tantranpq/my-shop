@@ -95,9 +95,15 @@ export default function AdminProfileSetupPage() {
 
             toast.success('Thông tin profile đã được cập nhật!');
             router.replace('/admin/dashboard'); // Chuyển hướng về dashboard sau khi lưu
-        } catch (err: any) {
-            console.error('Lỗi khi cập nhật profile:', err.message);
-            toast.error('Lỗi khi cập nhật profile: ' + err.message);
+        } catch (error: unknown) {
+    console.error('Lỗi khi cập nhật profile:', error);
+
+    if (error instanceof Error) {
+        toast.error('Lỗi khi cập nhật profile: ' + error.message);
+    } else {
+        toast.error('Lỗi khi cập nhật profile: Lỗi không xác định');
+    }
+
         } finally {
             setIsSaving(false);
         }

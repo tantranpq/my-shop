@@ -15,7 +15,7 @@ const supabaseAdmin = createClient(
 );
 
 // Helper function để kiểm tra xem request có được ủy quyền từ admin không
-async function authorizeAdmin(req: Request): Promise<{ authorized: boolean; message?: string; user?: any }> {
+async function authorizeAdmin(req: Request): Promise<{ authorized: boolean; message?: string; user?: unknown }> {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
         return { authorized: false, message: 'Unauthorized: Missing Authorization header.' };
@@ -125,9 +125,12 @@ export async function DELETE(req: Request) {
         }
 
         // Đảm bảo admin không tự xóa tài khoản của mình
-        if (userIdToDelete === authResult.user.id) {
-             return NextResponse.json({ message: 'Forbidden: You cannot delete your own account.' }, { status: 403 });
-        }
+        if (typeof authResult.user === 'object' && authResult.user !== null && 'id' in authResult.user) {
+    if (userIdToDelete === authResult.user.id) {
+        return NextResponse.json({ message: 'Forbidden: You cannot delete your own account.' }, { status: 403 });
+    }
+}
+
 
         // Xóa người dùng khỏi Supabase Auth
         const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userIdToDelete);

@@ -1,15 +1,18 @@
 // app/profile/page.tsx
 "use client";
 import { useState, useEffect, Suspense, useCallback } from 'react';
-import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
+import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
+// Define Profile and other interfaces outside component
 interface Profile {
     full_name: string | null;
     phone: string | null;
     address: string | null;
+    role: 'user' | 'admin' | 'staff' | null;
 }
 
 interface Order {
@@ -58,611 +61,432 @@ function ProfileContent() {
     const user = useUser();
     const router = useRouter();
     const queryClient = useQueryClient();
+    const { isLoading: isLoadingSession } = useSessionContext();
 
-    const [profileData, setProfileData] = useState<Profile>({ full_name: null, phone: null, address: null });
-    const [originalProfileData, setOriginalProfileData] = useState<Profile>({ full_name: null, phone: null, address: null });
-    const [isSubmittingProfile, setIsSubmittingProfile] = useState(false);
-    const [isOrderDetailsDialogOpen, setIsOrderDetailsDialogOpen] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [address, setAddress] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-    const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-    const [loadingAuth, setLoadingAuth] = useState(true);
 
-    const [isProfileEditMode, setIsProfileEditMode] = useState(false);
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-    const [showOrders, setShowOrders] = useState(false);
-
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
-
-    // THAY ĐỔI MỚI: Trạng thái để kiểm soát việc hiển thị form setup/initial profile
-    const [isSetupMode, setIsSetupMode] = useState(false);
-
-    useEffect(() => {
-        if (user !== undefined) {
-            setLoadingAuth(false);
-        }
-    }, [user]);
-
-    const { data: fetchedProfile, isLoading: isLoadingProfile } = useQuery<Profile | null, Error>({
-        queryKey: ['userProfile', user?.id],
+    // Fetch profile data
+    const { data: profile, isLoading: isLoadingProfile, error: profileError } = useQuery<Profile | null, Error>({
+        queryKey: ['profile', user?.id],
         queryFn: async () => {
-            if (!user?.id) return null;
+            if (!user) return null; // If no user, fetch returns null
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('full_name, phone, address')
+                .select('full_name, phone, address, role')
                 .eq('id', user.id)
                 .single();
-            if (error && error.code !== 'PGRST116') {
-                throw error;
+            if (error) {
+                // If profile doesn't exist (PGRST116), return null to indicate no profile found
+                if (error.code === 'PGRST116') {
+                    return null;
+                }
+                throw error; // Other errors should be thrown
             }
-            return data as Profile;
+            return data;
         },
-        enabled: !!user?.id && !loadingAuth,
-        staleTime: 1000 * 60 * 5,
-        refetchOnWindowFocus: false, // Ngăn không cho refetch khi tab được active lại
+        enabled: !!user && !isLoadingSession, // Query runs only if user is logged in and session is loaded
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 
-    // THAY ĐỔI CHÍNH: Logic để xác định chế độ setup
-    useEffect(() => {
-        if (!loadingAuth && user && fetchedProfile !== undefined) {
-            if (fetchedProfile === null || !fetchedProfile.full_name || !fetchedProfile.phone || !fetchedProfile.address) {
-                setIsSetupMode(true);
-                // Nếu là chế độ setup và có dữ liệu fetchedProfile (tức là đã có record nhưng thiếu thông tin)
-                // Thì set profileData để điền sẵn vào form
-                if (fetchedProfile) {
-                    setProfileData(fetchedProfile);
-                } else {
-                    // Nếu chưa có record profile nào, set profileData rỗng để người dùng điền mới
-                    setProfileData({ full_name: '', phone: '', address: '' });
-                }
-            } else {
-                setIsSetupMode(false);
-                setProfileData(fetchedProfile);
-                setOriginalProfileData(fetchedProfile);
-            }
-        }
-    }, [loadingAuth, user, fetchedProfile]);
-
-    useEffect(() => {
-        if (fetchedProfile) {
-            setProfileData(fetchedProfile);
-            setOriginalProfileData(fetchedProfile);
-        }
-    }, [fetchedProfile]);
-
-    const { data: userOrders } = useQuery<Order[], Error>({
-        queryKey: ['userOrders', user?.id],
+    // Fetch orders data
+    const { data: orders, isLoading: isLoadingOrders, error: ordersError } = useQuery<Order[], Error>({
+        queryKey: ['orders', user?.id],
         queryFn: async () => {
-            if (!user?.id) return [];
+            if (!user) throw new Error('User not logged in.');
             const { data, error } = await supabaseClient
                 .from('orders')
                 .select(`
-                    id,
-                    user_id,
-                    total_amount,
-                    payment_status,
-                    created_at,
-                    expires_at,
+                    *,
                     order_items (
-                        id,
-                        order_id,
-                        product_id,
-                        quantity,
-                        product_price,
-                        product_name,
-                        product_image
+                        id, product_id, quantity, product_price, product_name, product_image
                     )
                 `)
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            return data as unknown as Order[];
+            return data;
         },
-        enabled: !!user?.id && !loadingAuth && !isSetupMode, // Chỉ tải đơn hàng nếu không ở chế độ setup
-        staleTime: 1000 * 60,
+        enabled: !!user && !isLoadingSession,
+        staleTime: 1000 * 60 * 2, // 2 minutes
     });
 
+    // Update form fields when profile data changes
     useEffect(() => {
-        if (!user?.id || loadingAuth || isSetupMode) return; // Không lắng nghe nếu đang ở chế độ setup
+        if (profile) { // Check if profile is not null/undefined before accessing its properties
+            setFullName(profile.full_name || '');
+            setPhone(profile.phone || '');
+            setAddress(profile.address || '');
+        }
+    }, [profile]);
 
-        const channel = supabaseClient
-            .channel(`public:orders:user_id=eq.${user.id}`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${user.id}` },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ['userOrders', user.id] });
+    // Handle initial loading and redirection logic
+    useEffect(() => {
+        if (!isLoadingSession && !user) {
+            toast.info('Bạn cần đăng nhập để xem trang này.');
+            router.replace('/login');
+        } else if (!isLoadingSession && user && !isLoadingProfile) {
+            if (profile === undefined) {
+                console.warn("Unexpected: profile is undefined after isLoadingProfile is false.");
+                return;
+            }
+
+            if (!profile || !profile.full_name || !profile.phone || !profile.address) {
+                if (profile?.role === 'user' || !profile?.role) {
+                    toast.info('Vui lòng hoàn tất thông tin cá nhân của bạn.');
+                    router.replace('/profile-setup');
                 }
-            )
-            .subscribe();
+            } else if (profile.role && (profile.role === 'admin' || profile.role === 'staff')) {
+                toast.info('Bạn là quản trị viên/nhân viên. Đang chuyển hướng đến khu vực quản trị.');
+                router.replace('/admin/dashboard');
+            }
+        }
+    }, [isLoadingSession, user, isLoadingProfile, profile, router]);
 
-        return () => {
-            supabaseClient.removeChannel(channel);
-        };
-    }, [user?.id, supabaseClient, queryClient, loadingAuth, isSetupMode]);
 
-    // Hàm cập nhật profile (dùng chung cho cả setup và edit)
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSubmittingProfile(true);
-        setMessage(null);
+        setIsSaving(true);
+        try {
+            if (!user) throw new Error('User not logged in.');
 
-        if (!user) {
-            setMessage({ type: 'error', text: 'Bạn chưa đăng nhập.' });
-            setIsSubmittingProfile(false);
-            return;
-        }
+            const updates: Partial<Profile> = {
+                full_name: fullName.trim(),
+                phone: phone.trim(),
+                address: address.trim(),
+            };
 
-        // Kiểm tra các trường bắt buộc
-        if (!profileData.full_name || !profileData.phone || !profileData.address) {
-            setMessage({ type: 'error', text: 'Vui lòng điền đầy đủ Họ và tên, Số điện thoại và Địa chỉ.' });
-            setIsSubmittingProfile(false);
-            return;
-        }
+            const { error } = await supabaseClient
+                .from('profiles')
+                .update(updates)
+                .eq('id', user.id);
 
-        const { error } = await supabaseClient
-            .from('profiles')
-            .upsert({ id: user.id, ...profileData }, { onConflict: 'id' });
+            if (error) throw error;
 
-        setIsSubmittingProfile(false);
-
-        if (error) {
-            setMessage({ type: 'error', text: 'Lỗi lưu thông tin: ' + error.message });
-        } else {
-            setMessage({ type: 'success', text: 'Thông tin cá nhân đã được lưu thành công!' });
-            queryClient.invalidateQueries({ queryKey: ['userProfile', user.id] });
-            setIsProfileEditMode(false); // Thoát khỏi chế độ chỉnh sửa
-            setIsSetupMode(false); // Thoát khỏi chế độ setup
-            // Sau khi lưu thành công trong chế độ setup, refetch fetchedProfile để cập nhật trạng thái
-            // và kích hoạt useEffect kiểm tra setupMode
-            queryClient.invalidateQueries({ queryKey: ['userProfile', user.id] });
+            queryClient.invalidateQueries({ queryKey: ['profile', user.id] });
+            setEditing(false);
+            toast.success('Cập nhật profile thành công!');
+        } catch (error: any) {
+            console.error('Lỗi khi cập nhật profile:', error.message);
+            toast.error('Lỗi khi cập nhật profile: ' + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    const handleChangePassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmittingPassword(true);
-        setMessage(null);
-
-        if (newPassword !== confirmPassword) {
-            setMessage({ type: 'error', text: 'Mật khẩu mới và xác nhận mật khẩu không khớp.' });
-            setIsSubmittingPassword(false);
-            return;
-        }
-
-        if (newPassword.length < 6) {
-            setMessage({ type: 'error', text: 'Mật khẩu phải có ít nhất 6 ký tự.' });
-            setIsSubmittingPassword(false);
-            return;
-        }
-
-        const { error } = await supabaseClient.auth.updateUser({
-            password: newPassword,
-        });
-
-        setIsSubmittingPassword(false);
-        setNewPassword('');
-        setConfirmPassword('');
-
-        if (error) {
-            setMessage({ type: 'error', text: 'Thay đổi mật khẩu thất bại: ' + error.message });
-        } else {
-            setMessage({ type: 'success', text: 'Mật khẩu đã được thay đổi thành công!' });
-            setIsPasswordModalOpen(false);
-        }
-    };
-
-    const handleViewOrderDetails = (order: Order) => {
+    const handleOpenOrderDetailsDialog = useCallback((order: Order) => {
         setSelectedOrder(order);
-        setIsOrderDetailsDialogOpen(true);
-    };
+    }, []);
 
-    const handleCloseOrderDetailsDialog = () => {
-        setIsOrderDetailsDialogOpen(false);
+    const handleCloseOrderDetailsDialog = useCallback(() => {
         setSelectedOrder(null);
+    }, []);
+
+    // --- CORE RENDERING LOGIC AND TYPE NARROWING ---
+
+    // 1. Handle initial loading states
+    if (isLoadingSession || !user || isLoadingProfile) {
+        return (
+            <div className="flex justify-center items-center min-h-screen text-lg text-gray-700">
+                {isLoadingSession ? "Đang tải phiên đăng nhập..." : "Đang tải thông tin profile..."}
+            </div>
+        );
+    }
+
+    // 2. Handle 'profile' being `undefined` (should not happen if isLoadingProfile is false)
+    if (profile === undefined) {
+        console.error("Critical Error: 'profile' is undefined after isLoadingProfile is false. This should not happen.");
+        return (
+            <div className="flex justify-center items-center min-h-screen text-lg text-red-500">
+                Đã xảy ra lỗi không mong muốn khi tải profile. Vui lòng thử lại.
+            </div>
+        );
+    }
+
+    // Now, TypeScript knows `profile` is of type `Profile | null`.
+
+    // 3. Handle 'profile' being `null` (no profile found for the user)
+    if (profile === null) {
+        return null; // Redirection to /profile-setup is handled by useEffect
+    }
+
+    // Now, TypeScript knows `profile` is of type `Profile`.
+
+    // 4. Handle role-based redirection (admin/staff)
+    if (profile.role && (profile.role === 'admin' || profile.role === 'staff')) {
+        return null; // Redirection to /admin/dashboard is handled by useEffect
+    }
+
+    // 5. Handle incomplete profile (missing full_name, phone, address)
+    if (!profile.full_name || !profile.phone || !profile.address) {
+        console.warn("Incomplete profile detected, should have redirected.");
+        return null; // Redirection to /profile-setup is handled by useEffect
+    }
+
+    // ***** FINAL TYPE NARROWING FOR RENDERING *****
+    // At this point, we are certain that `profile` is a complete Profile object.
+    type NonNullableProfile = Profile & {
+        full_name: string;
+        phone: string;
+        address: string;
+        role: 'user' | null; // Keep role as 'user' | null
     };
+    const currentUserProfile: NonNullableProfile = profile as NonNullableProfile;
 
-    const closePasswordModal = useCallback(() => {
-        setIsPasswordModalOpen(false);
-        setNewPassword('');
-        setConfirmPassword('');
-        setMessage(null);
-    }, []);
-
-    useEffect(() => {
-        if (message) {
-            const timer = setTimeout(() => {
-                setMessage(null);
-            }, 3000);
-            return () => clearTimeout(timer);
-        }
-    }, [message]);
-
-    // Redirect to login if not logged in, but only after auth check is complete
-    useEffect(() => {
-        if (!loadingAuth && !user) {
-            router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
-        }
-    }, [loadingAuth, user, router]);
-
-    const enterProfileEditMode = useCallback(() => {
-        setIsProfileEditMode(true);
-        if (fetchedProfile) {
-            setProfileData(fetchedProfile);
-            setOriginalProfileData(fetchedProfile);
-        }
-    }, [fetchedProfile]);
-
-    const cancelProfileEditMode = useCallback(() => {
-        setIsProfileEditMode(false);
-        setProfileData(originalProfileData);
-    }, [originalProfileData]);
-
-    const toggleOrderVisibility = useCallback(() => {
-        setShowOrders(prev => !prev);
-    }, []);
-
-    // Hiển thị trạng thái loading chung
-    if (loadingAuth || isLoadingProfile || fetchedProfile === undefined) {
-        return (
-            <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="text-lg text-gray-700">Đang tải thông tin...</div>
-            </div>
-        );
-    }
-
-    // Nếu không có người dùng và không còn loading, sẽ chuyển hướng về login
-    if (!user) {
-        return null;
-    }
-
-    // HIỂN THỊ FORM SETUP NẾU CẦN
-    if (isSetupMode) {
-        return (
-            <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-                    <h1 className="text-2xl font-bold mb-6 text-center">Hoàn tất hồ sơ cá nhân</h1>
-                    <p className="text-gray-600 mb-6 text-center">
-                        Vui lòng điền đầy đủ thông tin cá nhân để hoàn tất quá trình đăng ký.
-                    </p>
-                    {message && (
-                        <div
-                            className={`mb-4 p-3 rounded-lg text-white ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}
-                            role="alert"
-                        >
-                            {message.text}
-                        </div>
-                    )}
-                    <form onSubmit={handleUpdateProfile}> {/* Sử dụng lại handleUpdateProfile */}
-                        <div className="mb-4">
-                            <label htmlFor="full_name" className="block text-gray-700 text-sm font-bold mb-2">
-                                Họ và tên <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
-                                id="full_name"
-                                type="text"
-                                placeholder="Nhập họ và tên của bạn"
-                                value={profileData.full_name || ''}
-                                onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div className="mb-4">
-                            <label htmlFor="phone" className="block text-gray-700 text-sm font-bold mb-2">
-                                Số điện thoại <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline"
-                                id="phone"
-                                type="text"
-                                placeholder="Nhập số điện thoại của bạn"
-                                value={profileData.phone || ''}
-                                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <div className="mb-6">
-                            <label htmlFor="address" className="block text-gray-700 text-sm font-bold mb-2">
-                                Địa chỉ <span className="text-red-500">*</span>
-                            </label>
-                            <textarea
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus-shadow-outline min-h-[80px]"
-                                id="address"
-                                placeholder="Nhập địa chỉ của bạn (Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố)"
-                                value={profileData.address || ''}
-                                onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                                required
-                            />
-                        </div>
-                        <button
-                            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus-shadow-outline w-full ${isSubmittingProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            type="submit"
-                            disabled={isSubmittingProfile}
-                        >
-                            {isSubmittingProfile ? 'Đang lưu...' : 'Lưu thông tin'}
-                        </button>
-                    </form>
-                </div>
-            </div>
-        );
-    }
-
-    // NẾU KHÔNG Ở CHẾ ĐỘ SETUP, HIỂN THỊ NỘI DUNG PROFILE CHÍNH THỨC
     return (
-        <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
-            <h1 className="text-4xl font-extrabold mb-8 text-center text-gray-900">Thông tin tài khoản của bạn</h1>
+        <div className="container mx-auto p-4 md:p-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-8 text-center">Thông tin cá nhân của bạn</h1>
 
-            {message && (
-                <div
-                    className={`fixed top-6 right-6 p-4 rounded-lg shadow-xl text-white z-80 transition-opacity duration-300 ease-in-out
-                        ${message.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}
-                    role="alert"
-                >
-                    <div className="flex items-center justify-between">
-                        <span className="font-semibold">{message.text}</span>
-                        <button onClick={() => setMessage(null)} className="ml-4 text-white text-xl font-bold opacity-75 hover:opacity-100 transition-opacity">
-                            &times;
+            {/* Profile Section */}
+            <div className="bg-white shadow-lg rounded-lg p-6 mb-8">
+                <div className="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 className="text-2xl font-semibold text-gray-700 flex items-center">
+                        <i className="fas fa-user text-blue-500 mr-3 text-2xl"></i>Thông tin cơ bản
+                    </h2>
+                    {!editing ? (
+                        <button
+                            type="button"
+                            onClick={() => setEditing(true)}
+                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 flex items-center"
+                        >
+                            <i className="fas fa-edit mr-2"></i>Chỉnh sửa
                         </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Action Icons Section */}
-            <div className="flex justify-center gap-8 mb-8 flex-wrap">
-                <button
-                    onClick={enterProfileEditMode}
-                    className="flex flex-col items-center text-blue-600 hover:text-blue-800 transition-colors duration-150 p-2 rounded-lg hover:bg-blue-100"
-                >
-                    <i className="fas fa-user-edit text-4xl mb-2"></i>
-                    <span className="text-sm font-semibold text-center">Thay đổi thông tin cá nhân</span>
-                </button>
-
-                <button
-                    onClick={() => setIsPasswordModalOpen(true)}
-                    className="flex flex-col items-center text-green-600 hover:text-green-800 transition-colors duration-150 p-2 rounded-lg hover:bg-green-100"
-                >
-                    <i className="fas fa-key text-4xl mb-2"></i>
-                    <span className="text-sm font-semibold text-center">Thay đổi mật khẩu</span>
-                </button>
-
-                <button
-                    onClick={toggleOrderVisibility}
-                    className="flex flex-col items-center text-purple-600 hover:text-purple-800 transition-colors duration-150 p-2 rounded-lg hover:bg-purple-100"
-                >
-                    <i className="fas fa-shopping-bag text-4xl mb-2"></i>
-                    <span className="text-sm font-semibold text-center">Đơn hàng của bạn</span>
-                </button>
-            </div>
-
-            {/* Profile Section - Centered */}
-            <div className="flex justify-center mb-8">
-                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 w-full max-w-lg">
-                    <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Thông tin cá nhân</h2>
-                    {!isProfileEditMode ? (
-                        <div>
-                            <div className="mb-4">
-                                <p className="text-gray-600 text-sm font-semibold mb-2">Họ và tên:</p>
-                                <p className="text-blue-700 text-xl font-bold">{profileData.full_name || 'Chưa cập nhật'}</p>
-                            </div>
-                            <div className="mb-4">
-                                <p className="text-gray-600 text-sm font-semibold mb-2">Số điện thoại:</p>
-                                <p className="text-blue-700 text-xl font-bold">{profileData.phone || 'Chưa cập nhật'}</p>
-                            </div>
-                            <div className="mb-6">
-                                <p className="text-gray-600 text-sm font-semibold mb-2">Địa chỉ:</p>
-                                <p className="text-blue-700 text-xl font-bold">{profileData.address || 'Chưa cập nhật'}</p>
-                            </div>
-                        </div>
                     ) : (
-                        <form onSubmit={handleUpdateProfile}>
-                            <div className="mb-5">
-                                <label htmlFor="full_name" className="block text-gray-700 text-base font-semibold mb-2">
-                                    Họ và tên
-                                </label>
-                                <input
-                                    id="full_name"
-                                    type="text"
-                                    className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-150 ease-in-out"
-                                    value={profileData.full_name || ''}
-                                    onChange={(e) => setProfileData({ ...profileData, full_name: e.target.value })}
-                                />
-                            </div>
-                            <div className="mb-5">
-                                <label htmlFor="phone" className="block text-gray-700 text-base font-semibold mb-2">
-                                    Số điện thoại
-                                </label>
-                                <input
-                                    id="phone"
-                                    type="text"
-                                    className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-150 ease-in-out"
-                                    value={profileData.phone || ''}
-                                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                                />
-                            </div>
-                            <div className="mb-7">
-                                <label htmlFor="address" className="block text-gray-700 text-base font-semibold mb-2">
-                                    Địa chỉ
-                                </label>
-                                <textarea
-                                    id="address"
-                                    className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[100px] resize-y transition duration-150 ease-in-out"
-                                    value={profileData.address || ''}
-                                    onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                                />
-                            </div>
-                            <div className="flex gap-4">
-                                <button
-                                    type="submit"
-                                    className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 w-full transition duration-150 ease-in-out ${isSubmittingProfile ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                    disabled={isSubmittingProfile}
-                                >
-                                    {isSubmittingProfile ? 'Đang lưu...' : 'Lưu thông tin'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={cancelProfileEditMode}
-                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 w-full transition duration-150 ease-in-out"
-                                >
-                                    Hủy
-                                </button>
-                            </div>
-                        </form>
+                        <div className="flex space-x-3">
+                            <button
+                                type="button"
+                                onClick={() => { setEditing(false); /* Reset fields if needed */ }}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 flex items-center"
+                                disabled={isSaving}
+                            >
+                                <i className="fas fa-times mr-2"></i>Hủy
+                            </button>
+                            <button
+                                type="submit"
+                                onClick={handleUpdateProfile}
+                                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                disabled={isSaving}
+                            >
+                                <i className="fas fa-save mr-2"></i>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                            </button>
+                        </div>
                     )}
                 </div>
+
+                <form onSubmit={handleUpdateProfile}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Full Name */}
+                        <div className="flex items-center bg-gray-50 p-3 rounded-lg shadow-sm">
+                            <i className="fas fa-user text-gray-600 mr-3 text-xl"></i>
+                            <div className="flex-1">
+                                <label htmlFor="fullName" className="block text-gray-700 text-sm font-semibold mb-1">Tên đầy đủ:</label>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        id="fullName"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                ) : (
+                                    <p className="text-lg text-gray-900 font-medium">{currentUserProfile.full_name}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Email */}
+                        <div className="flex items-center bg-gray-50 p-3 rounded-lg shadow-sm">
+                            <i className="fas fa-envelope text-gray-600 mr-3 text-xl"></i>
+                            <div className="flex-1">
+                                <label htmlFor="email" className="block text-gray-700 text-sm font-semibold mb-1">Email:</label>
+                                <p className="text-lg text-gray-900 font-medium">{user?.email}</p>
+                            </div>
+                        </div>
+
+                        {/* Phone Number */}
+                        <div className="flex items-center bg-gray-50 p-3 rounded-lg shadow-sm">
+                            <i className="fas fa-phone text-gray-600 mr-3 text-xl"></i>
+                            <div className="flex-1">
+                                <label htmlFor="phone" className="block text-gray-700 text-sm font-semibold mb-1">Số điện thoại:</label>
+                                {editing ? (
+                                    <input
+                                        type="tel"
+                                        id="phone"
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                ) : (
+                                    <p className="text-lg text-gray-900 font-medium">{currentUserProfile.phone}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Address */}
+                        <div className="flex items-center bg-gray-50 p-3 rounded-lg shadow-sm">
+                            <i className="fas fa-map-marker-alt text-gray-600 mr-3 text-xl"></i>
+                            <div className="flex-1">
+                                <label htmlFor="address" className="block text-gray-700 text-sm font-semibold mb-1">Địa chỉ:</label>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        id="address"
+                                        value={address}
+                                        onChange={(e) => setAddress(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-md py-2 px-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                ) : (
+                                    <p className="text-lg text-gray-900 font-medium">{currentUserProfile.address}</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    {editing && (
+                        <button type="submit" hidden aria-hidden="true"></button>
+                    )}
+                </form>
+
+                {/* New Password Change Section */}
+                <div className="mt-6 border-t pt-4">
+                    <h3 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
+                        <i className="fas fa-lock text-blue-500 mr-2 text-xl"></i>Bảo mật tài khoản
+                    </h3>
+                    <p className="text-gray-600 mb-4">Bạn có thể thay đổi mật khẩu của mình để bảo mật tài khoản tốt hơn.</p>
+                    <button
+                        onClick={() => router.push('/update-password')}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200 flex items-center"
+                    >
+                        <i className="fas fa-key mr-2"></i>Đổi mật khẩu
+                    </button>
+                </div>
+
             </div>
 
-            {showOrders && (
-                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 mt-8">
-                    <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b pb-4">Lịch sử đơn hàng</h2>
-                    {userOrders && userOrders.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg overflow-hidden">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">ID Đơn hàng</th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Ngày đặt</th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Tổng tiền</th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Trạng thái</th>
-                                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">Hành động</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {userOrders.map((order) => (
-                                        <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-100 ease-in-out">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">...{order.id.substring(order.id.length - 10)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">{new Date(order.created_at).toLocaleString('vi-VN')}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 font-semibold">{order.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
-                                                    ${order.payment_status === 'completed' || order.payment_status === 'paid' || order.payment_status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                                                      order.payment_status === 'pending_online' || order.payment_status === 'unconfirmed_cod' ? 'bg-yellow-100 text-yellow-800' :
-                                                      'bg-red-100 text-red-800'}`}>
-                                                    {translatePaymentStatus(order.payment_status)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                <button
-                                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors duration-150 ease-in-out"
-                                                    onClick={() => handleViewOrderDetails(order)}
-                                                >
-                                                    Xem chi tiết
-                                                </button>
-                                            </td>
+            {/* Order History Section */}
+            <div className="bg-white shadow-lg rounded-lg p-6">
+                <div className="flex items-center mb-6 border-b pb-4">
+                    <h2 className="text-2xl font-semibold text-gray-700 flex items-center">
+                        <i className="fas fa-history text-blue-500 mr-3 text-2xl"></i>Lịch sử đơn hàng
+                    </h2>
+                </div>
+                {isLoadingOrders ? (
+                    <p className="text-gray-600">Đang tải lịch sử đơn hàng...</p>
+                ) : ordersError ? (
+                    <p className="text-red-500">Lỗi khi tải đơn hàng: {ordersError.message}</p>
+                ) : (
+                    <>
+                        {orders && orders.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mã đơn hàng</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày đặt</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tổng tiền</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <p className="text-gray-600 text-center py-4">Bạn chưa có đơn hàng nào.</p>
-                    )}
-                </div>
-            )}
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {orders.map((order) => (
+                                            <tr key={order.id} className="hover:bg-gray-50 transition-colors duration-150">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#{order.id.substring(0, 8)}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(order.created_at).toLocaleDateString('vi-VN')}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                                        ${order.payment_status === 'completed' || order.payment_status === 'paid' || order.payment_status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                                                        order.payment_status === 'failed' || order.payment_status === 'refunded' ? 'bg-red-100 text-red-800' :
+                                                        'bg-yellow-100 text-yellow-800'}`}>
+                                                        {translatePaymentStatus(order.payment_status)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <button
+                                                        onClick={() => handleOpenOrderDetailsDialog(order)}
+                                                        className="text-indigo-600 hover:text-indigo-900 flex items-center"
+                                                    >
+                                                        <i className="fas fa-eye mr-1"></i>Xem chi tiết
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-gray-600 flex items-center">
+                                <i className="fas fa-shopping-bag text-blue-500 mr-2 text-xl"></i>Bạn chưa có đơn hàng nào.
+                            </p>
+                        )}
+                    </>
+                )}
+            </div>
 
-            {isPasswordModalOpen && (
-                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-80 p-4">
-                    <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
-                        <div className="flex justify-between items-center mb-6 border-b pb-4">
-                            <h2 className="text-2xl font-bold text-gray-800">Thay đổi mật khẩu</h2>
-                            <button onClick={closePasswordModal} className="text-gray-500 hover:text-gray-700 text-3xl font-bold transition-colors duration-150">
-                                &times;
-                            </button>
-                        </div>
-                        <form onSubmit={handleChangePassword}>
-                            <div className="mb-5">
-                                <label htmlFor="new_password_modal" className="block text-gray-700 text-base font-semibold mb-2">
-                                    Mật khẩu mới
-                                </label>
-                                <input
-                                    id="new_password_modal"
-                                    type="password"
-                                    className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-150 ease-in-out"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    required
-                                />
+            {/* Order Details Dialog */}
+            {selectedOrder && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-2xl font-bold mb-6 text-gray-800 flex items-center">
+                            <i className="fas fa-shopping-bag mr-3 text-blue-500"></i>Chi tiết đơn hàng #<span className="font-mono text-gray-600">{selectedOrder.id.substring(0, 8)}</span>
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 text-lg">
+                            <div className="flex items-center text-gray-700">
+                                <i className="fas fa-calendar-alt mr-2 text-blue-500"></i>
+                                <strong>Ngày đặt:</strong> {new Date(selectedOrder.created_at).toLocaleDateString('vi-VN')}
                             </div>
-                            <div className="mb-7">
-                                <label htmlFor="confirm_password_modal" className="block text-gray-700 text-base font-semibold mb-2">
-                                    Xác nhận mật khẩu mới
-                                </label>
-                                <input
-                                    id="confirm_password_modal"
-                                    type="password"
-                                    className="shadow-sm appearance-none border border-gray-300 rounded-lg w-full py-3 px-4 text-gray-800 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition duration-150 ease-in-out"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    required
-                                />
+                            <div className="flex items-center text-gray-700">
+                                <i className="fas fa-money-bill-wave mr-2 text-green-500"></i>
+                                <strong>Tổng tiền:</strong> {selectedOrder.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
                             </div>
-                            <div className="flex gap-4">
-                                <button
-                                    type="submit"
-                                    className={`bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 w-full transition duration-150 ease-in-out ${isSubmittingPassword ? 'opacity-60 cursor-not-allowed' : ''}`}
-                                    disabled={isSubmittingPassword}
-                                >
-                                    {isSubmittingPassword ? 'Đang thay đổi...' : 'Thay đổi mật khẩu'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={closePasswordModal}
-                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 text-base font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 w-full transition duration-150 ease-in-out"
-                                >
-                                    Hủy
-                                </button>
+                            <div className="flex items-center text-gray-700">
+                                <i className="fas fa-info-circle mr-2 text-purple-500"></i>
+                                <strong>Trạng thái:</strong> <span className={`ml-1 px-2 inline-flex text-sm leading-5 font-semibold rounded-full
+                                    ${selectedOrder.payment_status === 'completed' || selectedOrder.payment_status === 'paid' || selectedOrder.payment_status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                                    selectedOrder.payment_status === 'failed' || selectedOrder.payment_status === 'refunded' ? 'bg-red-100 text-red-800' :
+                                    'bg-yellow-100 text-yellow-800'}`}>
+                                    {translatePaymentStatus(selectedOrder.payment_status)}
+                                </span>
                             </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {isOrderDetailsDialogOpen && selectedOrder && (
-                <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-80 p-4">
-                    <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-200 ease-out">
-                        <div className="flex justify-between items-center mb-6 border-b pb-4">
-                            <h2 className="text-2xl font-bold text-gray-800">Chi tiết đơn hàng <span className="font-mono text-gray-600">#{selectedOrder.id.substring(selectedOrder.id.length - 10)}</span></h2>
-                            <button onClick={handleCloseOrderDetailsDialog} className="text-gray-500 hover:text-gray-700 text-3xl font-bold transition-colors duration-150">
-                                &times;
-                            </button>
                         </div>
-                        <div className="mb-6 text-gray-700 space-y-2">
-                            <p><strong>Ngày đặt:</strong> {new Date(selectedOrder.created_at).toLocaleString('vi-VN')}</p>
-                            <p><strong>Tổng tiền:</strong> <span className="font-semibold text-green-700">{selectedOrder.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</span></p>
-                            <p><strong>Trạng thái:</strong> <span className="font-semibold">{translatePaymentStatus(selectedOrder.payment_status)}</span></p>
-                            {selectedOrder.expires_at && (
-                                <p><strong>Ngày hết hạn:</strong> {new Date(selectedOrder.expires_at).toLocaleString('vi-VN')}</p>
-                            )}
-                        </div>
-                        <h3 className="text-xl font-semibold mb-4 text-gray-800">Sản phẩm:</h3>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-3 flex items-center border-t pt-4">
+                            <i className="fas fa-box-open mr-2 text-orange-500"></i>Sản phẩm:
+                        </h3>
                         <ul className="space-y-4">
                             {selectedOrder.order_items.map((item) => (
-                                <li key={item.id} className="flex items-center border-b border-gray-200 pb-4 last:border-b-0 last:pb-0">
+                                <li key={item.id} className="flex items-center space-x-4 p-3 border rounded-lg bg-gray-50 hover:shadow-md transition-shadow duration-150">
                                     {item.product_image && (
                                         <img
                                             src={item.product_image}
                                             alt={item.product_name}
-                                            className="h-16 w-16 object-cover rounded-lg mr-4 flex-shrink-0 shadow-sm"
-                                            onError={(e) => { e.currentTarget.src = `https://placehold.co/64x64/E0E0E0/333333?text=No+Image`; }}
+                                            className="w-20 h-20 object-cover rounded-md border border-gray-200"
                                         />
                                     )}
                                     <div className="flex-grow">
-                                        <p className="font-medium text-gray-900 text-lg">{item.product_name} <span className="text-gray-600">x {item.quantity}</span></p>
-                                        <p className="text-md text-gray-700 font-medium">
-                                            {item.product_price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
-                                        </p>
+                                        <p className="font-bold text-gray-900 text-lg">{item.product_name}</p>
+                                        <p className="text-md text-gray-700">Số lượng: <span className="font-medium text-blue-600">{item.quantity}</span></p>
+                                        <p className="text-md text-gray-700 font-medium">Giá: {item.product_price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
+                                    </div>
+                                    <div className="text-right text-lg font-bold text-green-700">
+                                        {(item.product_price * item.quantity).toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
                                     </div>
                                 </li>
                             ))}
                         </ul>
                         <div className="mt-8 flex justify-end">
                             <button
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 transition duration-150 ease-in-out"
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 transition duration-150 ease-in-out flex items-center"
                                 onClick={handleCloseOrderDetailsDialog}
                             >
-                                Đóng
+                                <i className="fas fa-times mr-2"></i>Đóng
                             </button>
                         </div>
                     </div>

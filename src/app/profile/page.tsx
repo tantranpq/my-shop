@@ -71,7 +71,7 @@ function ProfileContent() {
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
     // Fetch profile data
-    const { data: profile, isLoading: isLoadingProfile, error: profileError } = useQuery<Profile | null, Error>({
+    const { data: profile, isLoading: isLoadingProfile } = useQuery<Profile | null, Error>({
         queryKey: ['profile', user?.id],
         queryFn: async () => {
             if (!user) return null; // If no user, fetch returns null
@@ -171,9 +171,14 @@ function ProfileContent() {
             queryClient.invalidateQueries({ queryKey: ['profile', user.id] });
             setEditing(false);
             toast.success('Cập nhật profile thành công!');
-        } catch (error: any) {
-            console.error('Lỗi khi cập nhật profile:', error.message);
-            toast.error('Lỗi khi cập nhật profile: ' + error.message);
+        } catch (error: unknown) {
+    console.error('Lỗi khi cập nhật profile:', error);
+
+    if (error instanceof Error) {
+        toast.error('Lỗi khi cập nhật profile: ' + error.message);
+    } else {
+        toast.error('Lỗi khi cập nhật profile: Lỗi không xác định');
+    }
         } finally {
             setIsSaving(false);
         }

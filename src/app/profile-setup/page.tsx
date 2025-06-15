@@ -27,7 +27,7 @@ function ProfileSetupContent() {
 
     // Fetch user profile để điền vào form và kiểm tra trạng thái hoàn chỉnh
     // **Sửa:** Thay đổi kiểu dữ liệu của data từ Profile thành Profile | null
-    const { data: profileData, isLoading: isLoadingProfile, error: profileError } = useQuery<Profile | null, Error>({
+    const { data: profileData, isLoading: isLoadingProfile } = useQuery<Profile | null, Error>({
         queryKey: ['userProfileSetup', user?.id],
         queryFn: async () => {
             if (!user?.id) return null; // Nếu không có user ID, không fetch và trả về null
@@ -104,9 +104,15 @@ function ProfileSetupContent() {
 
             toast.success('Thông tin profile đã được cập nhật!');
             router.replace('/profile'); // Chuyển hướng về trang profile sau khi lưu
-        } catch (err: any) {
-            console.error('Lỗi khi cập nhật profile:', err.message);
-            toast.error('Lỗi khi cập nhật profile: ' + err.message);
+        } catch (error: unknown) {
+    console.error('Lỗi khi cập nhật profile:', error);
+
+    if (error instanceof Error) {
+        toast.error('Lỗi khi cập nhật profile: ' + error.message);
+    } else {
+        toast.error('Lỗi khi cập nhật profile: Lỗi không xác định');
+    }
+
         } finally {
             setIsSaving(false);
         }

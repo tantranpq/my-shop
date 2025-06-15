@@ -48,8 +48,8 @@ async function authorizeAdmin(req: Request): Promise<{ authorized: boolean; mess
         }
 
         return { authorized: true, user: userResponse.user };
-    } catch (err: any) {
-        console.error('Error during admin authorization:', err.message);
+     } catch (err: unknown) {
+        console.error('Error during admin authorization:', err);
         return { authorized: false, message: 'Internal Server Error during authorization.' };
     }
 }
@@ -100,9 +100,11 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ message: 'User created successfully.', user: { id: newUser.user?.id, email: newUser.user?.email } }, { status: 201 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Internal server error during POST:', err);
-        return NextResponse.json({ message: err.message || 'Internal server error.' }, { status: 500 });
+
+        const errorMessage = err instanceof Error ? err.message : 'Internal server error.';
+        return NextResponse.json({ message: errorMessage }, { status: 500 });
     }
 }
 
@@ -146,8 +148,10 @@ export async function DELETE(req: Request) {
 
         return NextResponse.json({ message: 'User deleted successfully.' }, { status: 200 });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Internal server error during DELETE:', err);
-        return NextResponse.json({ message: err.message || 'Internal server error.' }, { status: 500 });
+
+        const errorMessage = err instanceof Error ? err.message : 'Internal server error.';
+        return NextResponse.json({ message: errorMessage }, { status: 500 });
     }
 }

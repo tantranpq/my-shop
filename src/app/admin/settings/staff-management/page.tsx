@@ -1,7 +1,7 @@
 // app/admin/settings/staff-management/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -299,9 +299,15 @@ export default function StaffManagementPage() {
             }
             queryClient.invalidateQueries({ queryKey: ['staffList'] });
             closeModal();
-        } catch (err: any) {
-            console.error('Lỗi khi lưu nhân viên:', err);
-            toast.error('Lỗi khi lưu nhân viên: ' + (err.message || 'Lỗi không xác định'));
+        } catch (err: unknown) {
+    console.error('Lỗi khi lưu nhân viên:', err);
+
+    if (err instanceof Error) {
+        toast.error('Lỗi khi lưu nhân viên: ' + err.message);
+    } else {
+        toast.error('Lỗi khi lưu nhân viên: Lỗi không xác định');
+    }
+
         } finally {
             setIsSaving(false);
         }
@@ -345,9 +351,15 @@ export default function StaffManagementPage() {
 
             queryClient.invalidateQueries({ queryKey: ['staffList'] });
             toast.success('Xóa nhân viên thành công!');
-        } catch (err: any) {
-            console.error('Lỗi khi xóa nhân viên:', err);
-            toast.error('Lỗi khi xóa nhân viên: ' + (err.message || 'Lỗi không xác định'));
+        } catch (err: unknown) {
+    console.error('Lỗi khi xóa nhân viên:', err);
+
+    if (err instanceof Error) {
+        toast.error('Lỗi khi xóa nhân viên: ' + err.message);
+    } else {
+        toast.error('Lỗi khi xóa nhân viên: Lỗi không xác định');
+    }
+
         } finally {
             setIsSaving(false);
         }

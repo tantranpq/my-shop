@@ -131,7 +131,7 @@ export default function AdminProductsPage() {
     const queryClient = useQueryClient();
 
     // State quản lý UI/Error
-    const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
+    const [userRole, setUserRole] = useState<'user' | 'admin' | 'staff' |null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false); // Quản lý mở/đóng form
     const [editingProduct, setEditingProduct] = useState<Product | null>(null); // Sản phẩm đang chỉnh sửa
     const [isSubmitting, setIsSubmitting] = useState(false); // Trạng thái gửi form
@@ -189,7 +189,7 @@ export default function AdminProductsPage() {
 
     useEffect(() => {
         if (profileData) {
-            setUserRole(profileData.role as 'user' | 'admin');
+            setUserRole(profileData.role as 'user' | 'admin'| 'staff');
         }
     }, [profileData]);
 
@@ -201,7 +201,7 @@ export default function AdminProductsPage() {
     } = useQuery<{ products: Product[], totalCount: number | null }, Error>({
         queryKey: ['adminProducts', currentPage, debouncedSearchQuery, categoryFilter, stockQuantityFilter],
         queryFn: async () => {
-            if (userRole !== 'admin') {
+            if (userRole !== 'admin' && userRole !== 'staff') {
                 throw new Error('Bạn không có quyền xem sản phẩm.');
             }
             console.log("Fetching products as admin with TanStack Query...");
@@ -249,7 +249,7 @@ export default function AdminProductsPage() {
 
             return { products: productsWithTypeGuards as Product[], totalCount: count };
         },
-        enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
+        enabled: (userRole === 'admin' || userRole === 'staff') && !isLoadingSession && !isLoadingProfile,
         staleTime: 1000 * 60,
         placeholderData: (previousData) => previousData,
     });
@@ -272,7 +272,7 @@ export default function AdminProductsPage() {
             if (error) throw error;
             return data as { category: string }[];
         },
-        enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
+        enabled: (userRole === 'admin' || userRole === 'staff') && !isLoadingSession && !isLoadingProfile,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -367,7 +367,7 @@ export default function AdminProductsPage() {
     // --- Form Submission Handler (significantly updated) ---
     const handleSaveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (!user?.id || userRole !== 'admin') {
+        if (userRole !== 'admin' && userRole !== 'staff') {
             toast.error('Bạn không có quyền thực hiện thao tác này.');
             return;
         }
@@ -487,11 +487,12 @@ export default function AdminProductsPage() {
 
     // --- Hàm xử lý xóa sản phẩm (chỉnh sửa để xóa cả image và images) ---
     const handleDeleteProduct = async (productId: string) => {
-        if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) return;
-        if (!user?.id || userRole !== 'admin') {
+        if (userRole !== 'admin' ) {
             toast.error('Bạn không có quyền thực hiện thao tác này.');
             return;
         }
+        if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) return;
+        
 
         // Lấy thông tin sản phẩm để xóa ảnh khỏi Storage
         const { data: productToDelete, error: fetchError } = await supabaseClient
@@ -535,7 +536,7 @@ export default function AdminProductsPage() {
     };
 
     useEffect(() => {
-        if (!user || userRole !== 'admin') return;
+        if (!user || (userRole !== 'admin' && userRole !== 'staff')) return;
 
         const channel = supabaseClient
             .channel('realtime-products')
@@ -577,7 +578,7 @@ export default function AdminProductsPage() {
     if (productsQueryError) {
         return <div className="min-h-screen flex items-center justify-center text-xl text-red-500">Lỗi khi tải sản phẩm: {productsQueryError.message}</div>;
     }
-    if (userRole !== 'admin') {
+    if (userRole !== 'admin' && userRole !== 'staff') {
         return <div className="min-h-screen flex items-center justify-center text-xl text-red-500">Bạn không có quyền truy cập trang quản trị này.</div>;
     }
 

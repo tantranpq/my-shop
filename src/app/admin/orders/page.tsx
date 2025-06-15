@@ -250,7 +250,7 @@ export default function AdminOrdersPage() {
     const { isLoading: isLoadingSession } = useSessionContext();
     const queryClient = useQueryClient();
 
-    const [userRole, setUserRole] = useState<'user' | 'admin' | null>(null);
+    const [userRole, setUserRole] = useState<'user' | 'admin' | 'staff' | null>(null);
     const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
     const [updateError, setUpdateError] = useState<string | null>(null);
 
@@ -282,7 +282,7 @@ export default function AdminOrdersPage() {
 
     useEffect(() => {
         if (profileData) {
-            setUserRole(profileData.role as 'user' | 'admin');
+            setUserRole(profileData.role as 'user' | 'admin' | 'staff');
         }
     }, [profileData]);
 
@@ -295,7 +295,7 @@ export default function AdminOrdersPage() {
     } = useQuery<Order[], Error>({
         queryKey: ['adminOrders'], // QueryKey đơn giản, chỉ kích hoạt khi cần thiết
         queryFn: async () => {
-            if (userRole !== 'admin') {
+            if (userRole !== 'admin' && userRole !== 'staff') {
                 throw new Error('Bạn không có quyền xem đơn hàng.');
             }
 
@@ -325,14 +325,14 @@ export default function AdminOrdersPage() {
             console.log("Raw orders data from Supabase:", data); // Log raw data
             return data as Order[];
         },
-        enabled: userRole === 'admin' && !isLoadingSession && !isLoadingProfile,
+        enabled: (userRole === 'admin'|| userRole === 'staff') && !isLoadingSession && !isLoadingProfile,
         placeholderData: (previousData) => previousData, // Giữ dữ liệu cũ trong khi tải mới
         staleTime: 1000 * 60, // Giữ data fresh trong 1 phút trước khi refetch trên mount/focus
     });
 
     // --- Hàm xử lý cập nhật trạng thái thanh toán ---
     const handleUpdatePaymentStatus = async (orderId: string, newStatus: string) => {
-        if (!user?.id || userRole !== 'admin') {
+        if (!user?.id || (userRole !== 'admin' && userRole !== 'staff')) {
             alert('Bạn không có quyền thực hiện thao tác này.');
             return;
         }
@@ -362,7 +362,7 @@ export default function AdminOrdersPage() {
 
     // --- useEffect để lắng nghe Realtime Updates ---
     useEffect(() => {
-        if (userRole === 'admin') {
+        if (userRole === 'admin' || userRole === 'staff') {
             const channel = supabaseClient
                 .channel('public:orders')
                 .on('postgres_changes', {
@@ -454,7 +454,7 @@ export default function AdminOrdersPage() {
         );
     }
 
-    if (userRole !== 'admin') {
+    if (userRole !== 'admin' && userRole !== 'staff') {
         return (
             <div className="min-h-screen flex items-center justify-center text-xl text-red-500">
                 Bạn không có quyền truy cập trang này.

@@ -101,7 +101,7 @@ export default function ShippingSettingsPage() {
             queryClient.invalidateQueries({ queryKey: ['shippingSettings'] });
             resetForm();
         },
-        onError: (error) => {
+        onError: (error: Error) => { // Đã sửa lỗi 'any'
             toast.error(`Lỗi khi lưu cấu hình: ${error.message}`);
         },
     });
@@ -120,7 +120,7 @@ export default function ShippingSettingsPage() {
             toast.success('Xóa cấu hình vận chuyển thành công!');
             queryClient.invalidateQueries({ queryKey: ['shippingSettings'] });
         },
-        onError: (error) => {
+        onError: (error: Error) => { // Đã sửa lỗi 'any'
             toast.error(`Lỗi khi xóa cấu hình: ${error.message}`);
         },
     });
@@ -171,8 +171,12 @@ export default function ShippingSettingsPage() {
             }
 
             saveShippingSettingMutation.mutate(newSetting);
-        } catch (error: any) {
-            toast.error(`Lỗi định dạng JSON trong cấu hình bổ sung: ${error.message}`);
+        } catch (error) { // Đã sửa lỗi 'any' và thêm kiểm tra
+            if (error instanceof Error) {
+                toast.error(`Lỗi định dạng JSON trong cấu hình bổ sung: ${error.message}`);
+            } else {
+                toast.error('Lỗi định dạng JSON không xác định.');
+            }
         }
     };
 
@@ -273,9 +277,9 @@ export default function ShippingSettingsPage() {
                                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline font-mono text-xs"
                                 value={additionalConfig}
                                 onChange={(e) => setAdditionalConfig(e.target.value)}
-                                placeholder='{ "api_key": "...", "warehouse_id": "..." }'
+                                placeholder='{ &quot;api_key&quot;: &quot;...&quot;, &quot;warehouse_id&quot;: &quot;...&quot; }' // Đã sửa lỗi no-unescaped-entities
                             ></textarea>
-                            <p className="text-xs text-gray-500 mt-1">Sử dụng định dạng JSON hợp lệ. Ví dụ: `&lcub;"carrier": "GHN"&rcub;`</p>
+                            <p className="text-xs text-gray-500 mt-1">Sử dụng định dạng JSON hợp lệ. Ví dụ: `&lcub;&quot;carrier&quot;: &quot;GHN&quot;&rcub;`</p> {/* Đã sửa lỗi no-unescaped-entities và Unexpected token */}
                         </div>
 
                         <div className="flex items-center justify-between">

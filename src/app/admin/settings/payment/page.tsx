@@ -14,7 +14,7 @@ interface PaymentSetting {
     is_enabled: boolean;
     api_key_public: string | null;
     api_key_secret: string | null;
-    additional_config: Record<string, any> | null;
+    additional_config: Record<string, any> | null; // Cẩn thận với 'any' ở đây nếu bạn muốn type an toàn hơn cho config cụ thể
 }
 
 export default function PaymentSettingsPage() {
@@ -99,7 +99,7 @@ export default function PaymentSettingsPage() {
             queryClient.invalidateQueries({ queryKey: ['paymentSettings'] });
             resetForm();
         },
-        onError: (error) => {
+        onError: (error: Error) => { // Đã sửa lỗi 'any'
             toast.error(`Lỗi khi lưu cấu hình: ${error.message}`);
         },
     });
@@ -118,7 +118,7 @@ export default function PaymentSettingsPage() {
             toast.success('Xóa cấu hình thanh toán thành công!');
             queryClient.invalidateQueries({ queryKey: ['paymentSettings'] });
         },
-        onError: (error) => {
+        onError: (error: Error) => { // Đã sửa lỗi 'any'
             toast.error(`Lỗi khi xóa cấu hình: ${error.message}`);
         },
     });
@@ -166,8 +166,12 @@ export default function PaymentSettingsPage() {
             }
 
             savePaymentSettingMutation.mutate(newSetting);
-        } catch (error: any) {
-            toast.error(`Lỗi định dạng JSON trong cấu hình bổ sung: ${error.message}`);
+        } catch (error) { // Đã sửa lỗi 'any' và thêm kiểm tra
+            if (error instanceof Error) {
+                toast.error(`Lỗi định dạng JSON trong cấu hình bổ sung: ${error.message}`);
+            } else {
+                toast.error('Lỗi định dạng JSON không xác định.');
+            }
         }
     };
 
@@ -257,10 +261,10 @@ export default function PaymentSettingsPage() {
                                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline font-mono text-xs"
                                 value={additionalConfig}
                                 onChange={(e) => setAdditionalConfig(e.target.value)}
-                                placeholder='{ "webhook_secret": "whsec_...", "merchant_id": "your_merchant_id" }'
+                                placeholder='{ &quot;webhook_secret&quot;: &quot;whsec_...&quot;, &quot;merchant_id&quot;: &quot;your_merchant_id&quot; }' // Đã sửa lỗi no-unescaped-entities
                             ></textarea>
-                            <p className="text-xs text-gray-500 mt-1">Sử dụng định dạng JSON hợp lệ. Ví dụ: `&lcub;"currency" : "VND"&rcub;`</p>                        
-                            </div>
+                            <p className="text-xs text-gray-500 mt-1">Sử dụng định dạng JSON hợp lệ. Ví dụ: `&lcub;&quot;currency&quot; : &quot;VND&quot;&rcub;`</p> {/* Đã sửa lỗi no-unescaped-entities và Unexpected token */}
+                        </div>
 
 
                         <div className="flex items-center justify-between">

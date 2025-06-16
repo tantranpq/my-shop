@@ -36,7 +36,6 @@ export default function SalesPage() {
     const supabaseClient = useSupabaseClient();
     const user = useUser();
     const { isLoading: isLoadingSession } = useSessionContext();
-    const router = useRouter();
     const queryClient = useQueryClient();
 
     const [userRole, setUserRole] = useState<'user' | 'admin' | 'staff' | null>(null);

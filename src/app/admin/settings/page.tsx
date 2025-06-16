@@ -88,7 +88,7 @@ export default function AdminSettingsPage() {
                 )}
 
                 {/* Các mục cấu hình khác có thể thêm sau này */}
-                <Link href="/admin/settings/payments" className="block">
+                <Link href="/admin/settings/payment" className="block">
                     <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer h-full flex flex-col justify-between">
                         <div>
                             <div className="text-purple-600 mb-3 text-4xl text-center">

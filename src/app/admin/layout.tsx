@@ -17,7 +17,7 @@ function AdminSidebar({ userRole }: { userRole: 'user' | 'admin' | 'staff' | nul
                     {/* Các mục chỉ Admin được xem */}
                     {userRole === 'admin' && (
                         <li className="mb-2">
-                            <Link href="/admin/overview" className="block py-2 px-4 rounded hover:bg-gray-700 transition-colors duration-200">
+                            <Link href="/admin/dashboard" className="block py-2 px-4 rounded hover:bg-gray-700 transition-colors duration-200">
                                 <i className="fas fa-tachometer-alt mr-3"></i>Tổng quan
                             </Link>
                         </li>

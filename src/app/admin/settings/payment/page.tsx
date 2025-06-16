@@ -14,7 +14,7 @@ interface PaymentSetting {
     is_enabled: boolean;
     api_key_public: string | null;
     api_key_secret: string | null;
-    additional_config: Record<string, any> | null; // Cẩn thận với 'any' ở đây nếu bạn muốn type an toàn hơn cho config cụ thể
+   additional_config: Record<string, unknown> | null; // Đã sửa lỗi 'any'
 }
 
 export default function PaymentSettingsPage() {

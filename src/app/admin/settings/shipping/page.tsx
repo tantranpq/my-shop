@@ -15,7 +15,7 @@ interface ShippingSetting {
     price: number | null;
     free_over_amount: number | null;
     estimated_delivery_time: string | null;
-    additional_config: Record<string, any> | null;
+    additional_config: Record<string, unknown> | null;
 }
 
 export default function ShippingSettingsPage() {

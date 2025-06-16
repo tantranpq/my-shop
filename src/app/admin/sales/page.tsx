@@ -5,9 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
-// import { format } from 'date-fns'; // Not strictly needed for POS only view
-// import { vi } from 'date-fns/locale'; // Not strictly needed for POS only view
+
 
 // Định nghĩa kiểu dữ liệu cho một mục trong đơn hàng từ bảng order_items
 interface OrderItem {

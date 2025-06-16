@@ -1,3 +1,4 @@
+// app/checkout/CheckoutClient.tsx
 "use client";
 
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -147,13 +148,14 @@ export default function CheckoutClient() {
           address: profile.address,
           email: user.email, // Đảm bảo email được truyền
         },
-        // Chỉ gửi các thông tin cần thiết của sản phẩm.
-        // Tên và giá được bao gồm để Database Function có thể sử dụng trong thông báo lỗi.
+        // SỬA CÁCH ÁNH XẠ Ở ĐÂY ĐỂ KHỚP VỚI HÀM POSTGRESQL VÀ page.tsx
         checkoutItems: checkoutItems.map(item => ({
-            id: item.id,
+            product_id: item.id, // Đổi từ 'id' sang 'product_id'
+            product_name: item.name, // Đổi từ 'name' sang 'product_name'
+            product_price: item.price, // Đổi từ 'price' sang 'product_price'
             quantity: item.quantity,
-            name: item.name,
-            price: item.price,
+            // Nếu bạn có trường product_image trong ProductWithQuantity, hãy thêm nó vào đây
+            product_image: item.image, // Thêm nếu cần cho RPC của bạn để ghi nhật ký hoặc mục đích khác
         })),
         paymentMethod: paymentMethod,
         totalAmount: totalAmount,

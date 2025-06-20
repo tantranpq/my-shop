@@ -1,90 +1,148 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react'; // Added useRef
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp } from 'lucide-react'; // Import icons
+import { ChevronDown, ChevronUp, XCircle } from 'lucide-react'; // Thêm XCircle cho nút đóng modal
+import NextImage from 'next/image';
 
 // --- Định nghĩa Interface cho dữ liệu ---
 interface OrderItem {
     product_name: string;
     quantity: number;
     product_price: number;
+    product_image: string;
 }
 
+// Interface cho Customer (từ bảng 'customers')
+interface Customer {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+}
+
+// Interface cho cấu trúc dữ liệu trả về trực tiếp từ Supabase select
+interface RawSupabaseOrderData {
+    id: string;
+    created_at: string;
+    payment_method: string;
+    status: string | null;
+    payment_status: string;
+    total_amount: number;
+    expires_at: string | null;
+    customer: Customer | null;
+    items: OrderItem[];
+}
+
+// Interface Order mà chúng ta sẽ sử dụng trong ứng dụng (sau khi xử lý dữ liệu từ Supabase)
 interface Order {
     id: string;
     created_at: string;
-    customer_name: string;
-    customer_email: string;
-    customer_phone: string | null;
-    customer_address: string | null;
+    customer: Customer | null;
     payment_method: string;
-    payment_status: string;
+    status: string | null; // Trạng thái vòng đời của đơn hàng
+    payment_status: string; // Trạng thái thanh toán
     total_amount: number;
-    expires_at: string | null; // expires_at for online orders
+    expires_at: string | null;
     order_items: OrderItem[];
 }
 
-// Các trạng thái thanh toán thực tế từ database (dùng cho logic và mapping)
-// const PAYMENT_STATUSES = ['paid', 'failed', 'refunded', 'pending_online', 'confirmed', 'unconfirmed_cod', 'completed'];
+// --- Hằng số và Mapping cho Trạng thái Đơn hàng (Order Lifecycle Status) ---
+const UPDATABLE_ORDER_STATUSES = ['pending', 'delivery', 'delivered', 'returned', 'cancelled', 'unknown'];
 
-// Các trạng thái có thể cập nhật qua dropdown (giá trị thực tế sẽ được gửi đi)
-const UPDATABLE_STATUSES = ['unconfirmed_cod', 'pending_online', 'confirmed', 'paid', 'failed', 'refunded', 'completed'];
-
-// Bản đồ chi tiết trạng thái: văn bản hiển thị và lớp CSS màu sắc
-const STATUS_DETAILS: { [key: string]: { text: string; colorClass: string } } = {
-    'unconfirmed_cod': { text: 'Chờ xác nhận', colorClass: 'bg-orange-100 text-orange-800' },
-    'pending_online': { text: 'Chờ thanh toán', colorClass: 'bg-yellow-100 text-yellow-800' },
-    'confirmed': { text: 'Đã xác nhận', colorClass: 'bg-blue-100 text-blue-800' },
-    'paid': { text: 'Đã thanh toán', colorClass: 'bg-green-100 text-green-800' },
-    'failed': { text: 'Thất bại', colorClass: 'bg-red-100 text-red-800' },
-    'refunded': { text: 'Đã hoàn tiền', colorClass: 'bg-gray-100 text-gray-800' },
-    'completed': { text: 'Đã hoàn thành', colorClass: 'bg-emerald-100 text-emerald-800' }, // New status
+const ORDER_STATUS_DETAILS: { [key: string]: { text: string; colorClass: string } } = {
+    'pending': { text: 'Chờ xác nhận', colorClass: 'bg-orange-100 text-orange-800' },
+    'delivery': { text: 'Chờ giao hàng', colorClass: 'bg-blue-100 text-blue-800' },
+    'delivered': { text: 'Đã giao', colorClass: 'bg-green-100 text-green-800' },
+    'returned': { text: 'Trả hàng', colorClass: 'bg-gray-100 text-gray-800' },
+    'cancelled': { text: 'Đã huỷ', colorClass: 'bg-red-100 text-red-800' },
+    'unknown': { text: 'Không rõ trạng thái', colorClass: 'bg-gray-100 text-gray-800' },
 };
 
-// Define filter options for the payment status dropdown to avoid duplicates
-const FILTER_STATUS_OPTIONS = [
+const FILTER_ORDER_STATUS_OPTIONS = [
     { value: 'all', label: 'Tất cả' },
-    { value: 'pending_online', label: 'Chờ thanh toán' },
-    { value: 'unconfirmed_cod', label: 'Chờ xác nhận' },
-    { value: 'paid', label: 'Đã thanh toán' },
-    { value: 'confirmed', label: 'Đã xác nhận' },
-    { value: 'failed', label: 'Thất bại' },
-    { value: 'refunded', label: 'Đã hoàn tiền' },
-    { value: 'completed', label: 'Đã hoàn thành' }, // New filter option
+    { value: 'pending', label: 'Chờ xác nhận' },
+    { value: 'delivery', label: 'Chờ giao hàng' },
+    { value: 'delivered', label: 'Đã giao' },
+    { value: 'returned', label: 'Trả hàng' },
+    { value: 'cancelled', label: 'Đã huỷ' },
+    { value: 'unknown', label: 'Không rõ trạng thái' },
 ];
 
-// Helper function to get the correct value for the dropdown's 'value' prop
-const getSelectValueForDropdown = (status: string): string => {
+// Helper function cho dropdown Trạng thái Đơn hàng
+const getSelectValueForOrderStatusDropdown = (status: string | null): string => {
+    if (!status) return 'unknown';
     const normalizedStatus = status.toLowerCase().trim();
-    if (normalizedStatus === 'pending_online') {
-        return 'pending_online';
+    if (UPDATABLE_ORDER_STATUSES.includes(normalizedStatus)) {
+        return normalizedStatus;
     }
-    if (normalizedStatus === 'unconfirmed_cod') {
-        return 'unconfirmed_cod';
-    }
-    if (normalizedStatus === 'completed') { // Handle 'completed' status
-        return 'completed';
-    }
-    return status;
+    return 'unknown';
 };
+
+// --- Hằng số và Mapping cho Trạng thái Thanh toán (Payment Status) ---
+const UPDATABLE_PAYMENT_STATUSES = ['pending_online', 'confirmed', 'paid', 'failed', 'refunded', 'unconfirmed_cod', 'completed', 'unknown'];
+
+const PAYMENT_STATUS_DROPDOWN_OPTIONS: { [key: string]: { text: string; colorClass: string } } = {
+    'pending_online': { text: 'Chờ thanh toán online', colorClass: 'bg-orange-100 text-orange-800' },
+    'unconfirmed_cod': { text: 'Chưa xác nhận COD', colorClass: 'bg-yellow-100 text-yellow-800' },
+    'confirmed': { text: 'Đã xác nhận', colorClass: 'bg-blue-100 text-blue-800' },
+    'paid': { text: 'Đã thanh toán', colorClass: 'bg-green-100 text-green-800' },
+    'failed': { text: 'Thanh toán thất bại', colorClass: 'bg-red-100 text-red-800' },
+    'refunded': { text: 'Đã hoàn tiền', colorClass: 'bg-gray-100 text-gray-800' },
+    'completed': { text: 'Hoàn tất đơn hàng', colorClass: 'bg-purple-100 text-purple-800' },
+    'unknown': { text: 'Không rõ trạng thái', colorClass: 'bg-gray-100 text-gray-800' },
+};
+
+// Ánh xạ cho hiển thị đơn giản trong ô bảng (Không còn được dùng trực tiếp bên dưới dropdown)
+const SIMPLIFIED_PAYMENT_STATUS_DISPLAY_MAP: { [key: string]: string } = {
+    'pending_online': 'Đang chờ TT',
+    'unconfirmed_cod': 'Đang chờ TT',
+    'confirmed': 'Đã thanh toán',
+    'paid': 'Đã thanh toán',
+    'completed': 'Đã thanh toán',
+    'failed': 'Thất bại',
+    'refunded': 'Hoàn tiền',
+    'unknown': 'Không rõ',
+};
+
+const FILTER_PAYMENT_STATUS_OPTIONS = [
+    { value: 'all', label: 'Tất cả' },
+    { value: 'pending_online', label: 'Chờ thanh toán online' },
+    { value: 'unconfirmed_cod', label: 'Chưa xác nhận COD' },
+    { value: 'confirmed', label: 'Đã xác nhận' },
+    { value: 'paid', label: 'Đã thanh toán' },
+    { value: 'failed', label: 'Thanh toán thất bại' },
+    { value: 'refunded', label: 'Đã hoàn tiền' },
+    { value: 'completed', label: 'Hoàn tất đơn hàng' },
+    { value: 'unknown', label: 'Không rõ trạng thái' },
+];
+
+// Helper function cho dropdown Trạng thái Thanh toán
+const getSelectValueForPaymentStatusDropdown = (paymentStatus: string | null): string => {
+    if (!paymentStatus) return 'unknown';
+    const normalizedPaymentStatus = paymentStatus.toLowerCase().trim();
+    if (UPDATABLE_PAYMENT_STATUSES.includes(normalizedPaymentStatus)) {
+        return normalizedPaymentStatus;
+    }
+    return 'unknown';
+};
+
 
 // --- CountdownTimer Component ---
 interface CountdownTimerProps {
-    expiresAt: string | null; // ISO string
+    expiresAt: string | null;
     paymentMethod: string;
-    paymentStatus: string; // Added paymentStatus prop
+    status: string | null;
 }
 
-const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMethod, paymentStatus }) => {
+const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMethod, status }) => {
     const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
     useEffect(() => {
-        // Only show countdown for 'online' payment method and if expiresAt is provided
-        // Also, stop countdown if paymentStatus is 'paid' or 'completed'
-        if (paymentMethod !== 'online' || !expiresAt || paymentStatus === 'paid' || paymentStatus === 'completed') {
-            setRemainingSeconds(null); // Reset or hide countdown
+        if (paymentMethod !== 'online' || !expiresAt) {
+            setRemainingSeconds(null);
             return;
         }
 
@@ -96,52 +154,43 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMetho
             setRemainingSeconds(diffSeconds);
         };
 
-        calculateRemaining(); // Initial calculation immediately
+        calculateRemaining();
 
-        // Update every second
         const timer = setInterval(calculateRemaining, 1000);
 
-        // Cleanup interval on component unmount or prop change
         return () => clearInterval(timer);
-    }, [expiresAt, paymentMethod, paymentStatus]); // Re-run effect if expiresAt, paymentMethod, or paymentStatus changes
+    }, [expiresAt, paymentMethod]);
 
-    // If not an online payment, display N/A
     if (paymentMethod !== 'online') {
         return <span className="text-gray-500">N/A</span>;
     }
 
-    // If paymentStatus is 'paid', display 'Đã thanh toán' (or similar)
-    if (paymentStatus === 'paid') {
-        return <span className="text-green-600 font-bold">Đã thanh toán</span>;
-    }
-
-    // If paymentStatus is 'completed', display 'Đã hoàn thành'
-    if (paymentStatus === 'completed') {
-        return <span className="text-emerald-600 font-bold">Đã hoàn thành</span>;
-    }
-
-    // If remainingSeconds is null (e.g., expiresAt was null initially, or still calculating)
     if (remainingSeconds === null) {
         return <span className="text-gray-500">Đang tính...</span>;
     }
 
-    // If time has run out
     if (remainingSeconds <= 0) {
         return <span className="text-red-600 font-bold">Hết hạn</span>;
     }
 
-    // Format remaining time
-    const minutes = Math.floor(remainingSeconds / 60);
+    const hours = Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
     const seconds = remainingSeconds % 60;
 
+    const formattedHours = String(hours).padStart(2, '0');
     const formattedMinutes = String(minutes).padStart(2, '0');
     const formattedSeconds = String(seconds).padStart(2, '0');
 
-    return (
-        <span className="font-medium text-blue-600">
-            {formattedMinutes}:{formattedSeconds}
-        </span>
-    );
+    if (status === 'pending') {
+        return (
+            <span className="font-medium text-blue-600">
+                {formattedHours}:{formattedMinutes}:{formattedSeconds}
+            </span>
+        );
+    }
+    else {
+        return <span className="text-gray-500">--</span>;
+    }
 };
 // --- End CountdownTimer Component ---
 
@@ -180,18 +229,14 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onCh
         if (value === 'all') {
             newSelectedValues = ['all'];
         } else {
-            // If 'all' was previously selected, start with only the new value
             if (selectedValues.includes('all')) {
                 newSelectedValues = [value];
             } else if (selectedValues.includes(value)) {
-                // Deselect the value
                 newSelectedValues = selectedValues.filter(v => v !== value);
             } else {
-                // Select the value
                 newSelectedValues = [...selectedValues, value];
             }
 
-            // If no specific options are selected, default to 'all'
             if (newSelectedValues.length === 0) {
                 newSelectedValues = ['all'];
             }
@@ -216,7 +261,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onCh
                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex justify-between items-center"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className="truncate">{displayLabel}</span> {/* Added truncate for long labels */}
+                <span className="truncate">{displayLabel}</span>
                 {isOpen ? <ChevronUp className="h-4 w-4 ml-2 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 ml-2 flex-shrink-0" />}
             </button>
             {isOpen && (
@@ -229,7 +274,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onCh
                         >
                             <input
                                 type="checkbox"
-                                readOnly // Controlled by onClick
+                                readOnly
                                 checked={selectedValues.includes(option.value)}
                                 className="mr-2"
                             />
@@ -255,13 +300,18 @@ export default function AdminOrdersPage() {
     const [updateError, setUpdateError] = useState<string | null>(null);
 
     // States cho các giá trị input (cập nhật tức thì khi gõ, dùng để lọc client-side)
-    const [paymentStatusFilter, setPaymentStatusFilter] = useState<string[]>(['all']); // Initialize with 'all' selected
+    const [orderStatusFilter, setOrderStatusFilter] = useState<string[]>(['all']);
+    const [paymentStatusFilter, setPaymentStatusFilter] = useState<string[]>(['all']);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const [customerNameInput, setCustomerNameInput] = useState<string>('');
-    const [productNameInput, setProductNameInput] = useState<string>(''); // Lọc client-side
-    const [orderIdInput, setOrderIdInput] = useState<string>(''); // Lọc client-side
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState<string | 'all'>('all'); // New state for payment method filter
+    const [productNameInput, setProductNameInput] = useState<string>('');
+    const [orderIdInput, setOrderIdInput] = useState<string>('');
+    const [paymentMethodFilter, setPaymentMethodFilter] = useState<string | 'all'>('all');
+
+    // States cho tính năng xem chi tiết
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
     // --- Logic fetch vai trò người dùng và kiểm tra quyền admin ---
     const { data: profileData, isLoading: isLoadingProfile } = useQuery({
@@ -286,14 +336,14 @@ export default function AdminOrdersPage() {
         }
     }, [profileData]);
 
-    // --- Logic fetch TẤT CẢ danh sách đơn hàng (không áp dụng bộ lọc nào từ Supabase) ---
+    // --- Logic fetch TẤT CẢ danh sách đơn hàng (kết hợp với bảng customers) ---
     const {
-        data: orders, // Đây là dữ liệu thô từ server, chưa được lọc
+        data: orders,
         isLoading: isLoadingOrders,
         error: ordersQueryError,
         refetch
     } = useQuery<Order[], Error>({
-        queryKey: ['adminOrders'], // QueryKey đơn giản, chỉ kích hoạt khi cần thiết
+        queryKey: ['adminOrders'],
         queryFn: async () => {
             if (userRole !== 'admin' && userRole !== 'staff') {
                 throw new Error('Bạn không có quyền xem đơn hàng.');
@@ -305,33 +355,48 @@ export default function AdminOrdersPage() {
                 .select(`
                     id,
                     created_at,
-                    customer_name,
-                    customer_email,
-                    customer_phone,
-                    customer_address,
                     payment_method,
-                    payment_status,
+                    status,  
+                    payment_status, 
                     total_amount,
                     expires_at,
-                    order_items (
-                        product_name,
-                        quantity,
-                        product_price
-                    )
+                    customer:customer_id ( 
+                        id,
+                        full_name, 
+                        email,
+                        phone,
+                        address
+                    ),
+                    items 
                 `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            console.log("Raw orders data from Supabase:", data); // Log raw data
-            return data as Order[];
+
+            const rawData = data as unknown as RawSupabaseOrderData[];
+
+            const typedData = rawData.map(rawOrder => ({
+                id: rawOrder.id,
+                created_at: rawOrder.created_at,
+                payment_method: rawOrder.payment_method,
+                status: rawOrder.status,
+                payment_status: rawOrder.payment_status,
+                total_amount: rawOrder.total_amount,
+                expires_at: rawOrder.expires_at,
+                customer: rawOrder.customer,
+                order_items: rawOrder.items,
+            })) as Order[];
+
+            console.log("Raw orders data from Supabase:", typedData);
+            return typedData;
         },
-        enabled: (userRole === 'admin'|| userRole === 'staff') && !isLoadingSession && !isLoadingProfile,
-        placeholderData: (previousData) => previousData, // Giữ dữ liệu cũ trong khi tải mới
-        staleTime: 1000 * 60, // Giữ data fresh trong 1 phút trước khi refetch trên mount/focus
+        enabled: (userRole === 'admin' || userRole === 'staff') && !isLoadingSession && !isLoadingProfile,
+        placeholderData: (previousData) => previousData,
+        staleTime: 1000 * 60,
     });
 
-    // --- Hàm xử lý cập nhật trạng thái thanh toán ---
-    const handleUpdatePaymentStatus = async (orderId: string, newStatus: string) => {
+    // --- Hàm xử lý cập nhật trạng thái đơn hàng (Order Lifecycle Status) ---
+    const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
         if (!user?.id || (userRole !== 'admin' && userRole !== 'staff')) {
             alert('Bạn không có quyền thực hiện thao tác này.');
             return;
@@ -340,9 +405,9 @@ export default function AdminOrdersPage() {
         setUpdatingOrderIds(prev => new Set(prev).add(orderId));
         setUpdateError(null);
 
-        const { error: updatePaymentError } = await supabaseClient
+        const { error: updateErrorDb } = await supabaseClient
             .from('orders')
-            .update({ payment_status: newStatus })
+            .update({ status: newStatus === 'unknown' ? null : newStatus })
             .eq('id', orderId);
 
         setUpdatingOrderIds(prev => {
@@ -351,13 +416,55 @@ export default function AdminOrdersPage() {
             return newSet;
         });
 
-        if (updatePaymentError) {
-            console.error('Lỗi khi cập nhật trạng thái thanh toán:', updatePaymentError);
-            setUpdateError('Cập nhật trạng thái thất bại: ' + updatePaymentError.message);
+        if (updateErrorDb) {
+            console.error('Lỗi khi cập nhật trạng thái đơn hàng:', updateErrorDb);
+            setUpdateError('Cập nhật trạng thái đơn hàng thất bại: ' + updateErrorDb.message);
         } else {
             queryClient.invalidateQueries({ queryKey: ['adminOrders'] });
-            refetch(); // Refetch lại data để cập nhật
+            refetch();
         }
+    };
+
+    // --- Hàm xử lý cập nhật trạng thái thanh toán (Payment Status) ---
+    const handleUpdatePaymentStatus = async (orderId: string, newPaymentStatus: string) => {
+        if (!user?.id || (userRole !== 'admin' && userRole !== 'staff')) {
+            alert('Bạn không có quyền thực hiện thao tác này.');
+            return;
+        }
+
+        setUpdatingOrderIds(prev => new Set(prev).add(orderId));
+        setUpdateError(null);
+
+        const { error: updateErrorDb } = await supabaseClient
+            .from('orders')
+            .update({ payment_status: newPaymentStatus === 'unknown' ? null : newPaymentStatus })
+            .eq('id', orderId);
+
+        setUpdatingOrderIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(orderId);
+            return newSet;
+        });
+
+        if (updateErrorDb) {
+            console.error('Lỗi khi cập nhật trạng thái thanh toán:', updateErrorDb);
+            setUpdateError('Cập nhật trạng thái thanh toán thất bại: ' + updateErrorDb.message);
+        } else {
+            queryClient.invalidateQueries({ queryKey: ['adminOrders'] });
+            refetch();
+        }
+    };
+
+    // --- Hàm xử lý click vào hàng để xem chi tiết ---
+    const handleRowClick = (order: Order) => {
+        setSelectedOrder(order);
+        setIsDetailModalOpen(true);
+    };
+
+    // --- Hàm đóng modal chi tiết ---
+    const closeDetailModal = () => {
+        setIsDetailModalOpen(false);
+        setSelectedOrder(null);
     };
 
     // --- useEffect để lắng nghe Realtime Updates ---
@@ -371,7 +478,7 @@ export default function AdminOrdersPage() {
                     table: 'orders'
                 }, (payload) => {
                     console.log('Order change:', payload);
-                    refetch(); // Gọi refetch để tải lại dữ liệu mới nhất
+                    refetch();
                 })
                 .subscribe();
 
@@ -393,12 +500,26 @@ export default function AdminOrdersPage() {
             result = result.filter(order => order.id.toLowerCase().includes(lowerCaseOrderId));
         }
 
-        // Lọc theo trạng thái thanh toán (client-side)
+        // Lọc theo trạng thái Đơn hàng (Order Lifecycle Status)
+        if (orderStatusFilter.length > 0 && !orderStatusFilter.includes('all')) {
+            result = result.filter(order => {
+                const normalizedOrderStatus = order.status
+                    ? order.status.toLowerCase().trim()
+                    : 'unknown';
+                return orderStatusFilter.some(filterValue => {
+                    return normalizedOrderStatus === filterValue;
+                });
+            });
+        }
+
+        // Lọc theo trạng thái Thanh toán (Payment Status)
         if (paymentStatusFilter.length > 0 && !paymentStatusFilter.includes('all')) {
             result = result.filter(order => {
-                const normalizedOrderStatus = order.payment_status.toLowerCase().trim();
+                const normalizedPaymentStatus = order.payment_status
+                    ? order.payment_status.toLowerCase().trim()
+                    : 'unknown';
                 return paymentStatusFilter.some(filterValue => {
-                    return normalizedOrderStatus === filterValue;
+                    return normalizedPaymentStatus === filterValue;
                 });
             });
         }
@@ -420,10 +541,15 @@ export default function AdminOrdersPage() {
             result = result.filter(order => new Date(order.created_at) <= end);
         }
 
-        // Lọc theo tên khách hàng (client-side)
+        // Lọc theo tên khách hàng (client-side) 
         if (customerNameInput) {
             const lowerCaseName = customerNameInput.toLowerCase();
-            result = result.filter(order => order.customer_name.toLowerCase().includes(lowerCaseName));
+            result = result.filter(order => {
+                if (order.customer && order.customer.full_name) {
+                    return order.customer.full_name.toLowerCase().includes(lowerCaseName);
+                }
+                return false;
+            });
         }
 
         // Lọc theo tên sản phẩm (client-side)
@@ -433,9 +559,9 @@ export default function AdminOrdersPage() {
                 order.order_items.some(item => item.product_name.toLowerCase().includes(lowerCaseProductName))
             );
         }
-        console.log("Filtered orders data for rendering:", result); // Log filtered data
+        console.log("Filtered orders data for rendering:", result);
         return result;
-    }, [orders, orderIdInput, paymentStatusFilter, paymentMethodFilter, startDate, endDate, customerNameInput, productNameInput]);
+    }, [orders, orderIdInput, orderStatusFilter, paymentStatusFilter, paymentMethodFilter, startDate, endDate, customerNameInput, productNameInput]);
 
     // Extract unique payment methods for the filter dropdown
     const uniquePaymentMethods = useMemo(() => {
@@ -470,7 +596,6 @@ export default function AdminOrdersPage() {
         );
     }
 
-    // Hiển thị thông báo tải chỉ khi đang tải lần đầu và chưa có dữ liệu
     if (isLoadingOrders && !orders) {
         return (
             <div className="min-h-screen flex items-center justify-center text-xl text-gray-700">
@@ -505,14 +630,25 @@ export default function AdminOrdersPage() {
                     />
                 </div>
 
-                {/* Lọc theo trạng thái thanh toán */}
+                {/* Lọc theo trạng thái Đơn hàng */}
                 <div>
-                    <label htmlFor="paymentStatusFilter" className="block text-gray-700 text-sm font-bold mb-2">Trạng thái TT</label>
+                    <label htmlFor="orderStatusFilter" className="block text-gray-700 text-sm font-bold mb-2">Trạng thái Đơn hàng</label>
                     <MultiSelect
-                        options={FILTER_STATUS_OPTIONS}
+                        options={FILTER_ORDER_STATUS_OPTIONS}
+                        selectedValues={orderStatusFilter}
+                        onChange={setOrderStatusFilter}
+                        placeholder="Chọn trạng thái đơn hàng"
+                    />
+                </div>
+
+                {/* Lọc theo Trạng thái Thanh toán */}
+                <div>
+                    <label htmlFor="paymentStatusFilter" className="block text-gray-700 text-sm font-bold mb-2">Trạng thái Thanh toán</label>
+                    <MultiSelect
+                        options={FILTER_PAYMENT_STATUS_OPTIONS}
                         selectedValues={paymentStatusFilter}
                         onChange={setPaymentStatusFilter}
-                        placeholder="Chọn trạng thái"
+                        placeholder="Chọn trạng thái thanh toán"
                     />
                 </div>
 
@@ -600,28 +736,33 @@ export default function AdminOrdersPage() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Khách hàng</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tổng tiền</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phương thức TT</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái ĐH</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái TT</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thời gian còn lại</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chi tiết sản phẩm</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hành động</th>
+                                {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chi tiết sản phẩm</th> */}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredOrders?.map((order) => {
-                                const normalizedStatus = order.payment_status.toLowerCase().trim();
-                                const displayDetails = STATUS_DETAILS[normalizedStatus] || { text: order.payment_status, colorClass: 'bg-gray-100 text-gray-800' };
+                                const normalizedOrderStatus = order.status
+                                    ? order.status.toLowerCase().trim()
+                                    : 'unknown';
+                                const orderDisplayDetails = ORDER_STATUS_DETAILS[normalizedOrderStatus] || { text: 'Không rõ trạng thái', colorClass: 'bg-gray-100 text-gray-800' };
 
                                 return (
-                                    <tr key={order.id}>
+                                    <tr
+                                        key={order.id}
+                                        onClick={() => handleRowClick(order)}
+                                        className="hover:bg-gray-100 cursor-pointer"
+                                    >
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">...{order.id.substring(order.id.length - 10)}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {new Date(order.created_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <p className="font-semibold">{order.customer_name}</p>
-                                            <p className="text-gray-500">{order.customer_email}</p>
-                                            {order.customer_phone && <p className="text-gray-500">{order.customer_phone}</p>}
-                                            {order.customer_address && <p className="text-gray-500">{order.customer_address}</p>}
+                                            <p className="font-semibold">{order.customer?.full_name}</p>
+                                            {/* Chỉ hiển thị tên và SĐT ở đây, chi tiết đầy đủ trong modal */}
+                                            {order.customer?.phone && <p className="text-gray-500">{order.customer.phone}</p>}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {order.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
@@ -629,48 +770,136 @@ export default function AdminOrdersPage() {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {order.payment_method}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${displayDetails.colorClass}`}>
-                                                {displayDetails.text}
-                                            </span>
+                                        {/* Cột Trạng thái Đơn hàng */}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm" onClick={(e) => e.stopPropagation()}> {/* Ngăn sự kiện click hàng */}
+                                            <select
+                                                className={`mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${orderDisplayDetails.colorClass}`}
+                                                value={getSelectValueForOrderStatusDropdown(order.status)}
+                                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                                disabled={updatingOrderIds.has(order.id)}
+                                            >
+                                                {UPDATABLE_ORDER_STATUSES.map((status) => (
+                                                    <option key={status} value={status}>
+                                                        {ORDER_STATUS_DETAILS[status]?.text || status}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {updatingOrderIds.has(order.id) && <p className="text-xs text-blue-600 mt-1">Đang cập nhật...</p>}
+                                        </td>
+                                        {/* Cột Trạng thái Thanh toán */}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm" onClick={(e) => e.stopPropagation()}> {/* Ngăn sự kiện click hàng */}
+                                            <select
+                                                className={`mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${PAYMENT_STATUS_DROPDOWN_OPTIONS[order.payment_status]?.colorClass || 'bg-gray-100 text-gray-800'}`}
+                                                value={getSelectValueForPaymentStatusDropdown(order.payment_status)}
+                                                onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value)}
+                                                disabled={updatingOrderIds.has(order.id)}
+                                            >
+                                                {UPDATABLE_PAYMENT_STATUSES.map((pStatus) => (
+                                                    <option key={pStatus} value={pStatus}>
+                                                        {PAYMENT_STATUS_DROPDOWN_OPTIONS[pStatus]?.text || pStatus}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             <CountdownTimer
                                                 expiresAt={order.expires_at}
                                                 paymentMethod={order.payment_method}
-                                                paymentStatus={order.payment_status} // Pass paymentStatus
+                                                status={order.status}
                                             />
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             <ul className="list-disc list-inside text-xs">
-                                                {/* Ensure order_items is an array before mapping */}
                                                 {order.order_items && order.order_items.map((item, idx) => (
                                                     <li key={idx}>
                                                         {item.product_name} ({item.quantity} x {item.product_price.toLocaleString('vi-VN')})
                                                     </li>
                                                 ))}
                                             </ul>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <select
-                                                className="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                                value={getSelectValueForDropdown(order.payment_status)}
-                                                onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value)}
-                                                disabled={updatingOrderIds.has(order.id)}
-                                            >
-                                                {UPDATABLE_STATUSES.map((status) => (
-                                                    <option key={status} value={status}>
-                                                        {STATUS_DETAILS[status]?.text || status}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            {updatingOrderIds.has(order.id) && <p className="text-xs text-blue-600 mt-1">Đang cập nhật...</p>}
-                                        </td>
+                                        </td> */}
                                     </tr>
                                 );
                             })}
                         </tbody>
                     </table>
+                </div>
+            )}
+
+            {/* Modal Chi tiết Đơn hàng */}
+            {isDetailModalOpen && selectedOrder && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
+                        <button
+                            onClick={closeDetailModal}
+                            className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+                        >
+                            <XCircle size={24} />
+                        </button>
+                        <div className="p-6">
+                            <h2 className="text-2xl font-bold mb-4 text-gray-800">Chi tiết Đơn hàng: #{selectedOrder.id.substring(selectedOrder.id.length - 10)}</h2>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <div>
+                                    <h3 className="font-semibold text-lg text-gray-700 mb-2">Thông tin Đơn hàng</h3>
+                                    <p><strong>ID Đơn hàng:</strong> {selectedOrder.id}</p>
+                                    <p><strong>Ngày tạo:</strong> {new Date(selectedOrder.created_at).toLocaleString('vi-VN', { dateStyle: 'full', timeStyle: 'medium' })}</p>
+                                    <p><strong>Tổng tiền:</strong> {selectedOrder.total_amount.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
+                                    <p><strong>Phương thức thanh toán:</strong> {selectedOrder.payment_method}</p>
+                                    <p><strong>Trạng thái Đơn hàng:</strong> <span className={`${ORDER_STATUS_DETAILS[getSelectValueForOrderStatusDropdown(selectedOrder.status)]?.colorClass || 'bg-gray-100 text-gray-800'} px-2 py-1 rounded-full text-xs font-semibold`}>
+                                        {ORDER_STATUS_DETAILS[getSelectValueForOrderStatusDropdown(selectedOrder.status)]?.text || 'Không rõ trạng thái'}
+                                    </span></p>
+                                    <p><strong>Trạng thái Thanh toán:</strong> <span className={`${PAYMENT_STATUS_DROPDOWN_OPTIONS[getSelectValueForPaymentStatusDropdown(selectedOrder.payment_status)]?.colorClass || 'bg-gray-100 text-gray-800'} px-2 py-1 rounded-full text-xs font-semibold`}>
+                                        {PAYMENT_STATUS_DROPDOWN_OPTIONS[getSelectValueForPaymentStatusDropdown(selectedOrder.payment_status)]?.text || 'Không rõ trạng thái'}
+                                    </span></p>
+                                    {selectedOrder.payment_method === 'online' && (
+                                        <p><strong>Thời gian còn lại:</strong>
+                                            <CountdownTimer
+                                                expiresAt={selectedOrder.expires_at}
+                                                paymentMethod={selectedOrder.payment_method}
+                                                status={selectedOrder.status}
+                                            />
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-lg text-gray-700 mb-2">Thông tin Khách hàng</h3>
+                                    <p><strong>Tên:</strong> {selectedOrder.customer?.full_name || 'N/A'}</p>
+                                    <p><strong>Email:</strong> {selectedOrder.customer?.email || 'N/A'}</p>
+                                    <p><strong>Điện thoại:</strong> {selectedOrder.customer?.phone || 'N/A'}</p>
+                                    <p><strong>Địa chỉ:</strong> {selectedOrder.customer?.address || 'N/A'}</p>
+                                </div>
+                            </div>
+
+                            <h3 className="font-semibold text-lg text-gray-700 mb-2">Sản phẩm trong Đơn hàng</h3>
+                            {selectedOrder.order_items && selectedOrder.order_items.length > 0 ? (
+                                <ul className="list-disc list-inside space-y-1">
+                                    {selectedOrder.order_items.map((item, index) => (
+                                        <li key={index} className="text-gray-700 list-disc list-inside flex items-center">
+                                            {item.product_image && (
+                                                <NextImage
+                                                    src={item.product_image}
+                                                    alt={item.product_name}
+                                                    width={48}
+                                                    height={48}
+                                                    className="w-12 h-12 object-cover rounded mr-3"
+                                                />
+                                            )}
+                                            <span>
+                                                {item.product_name} - Số lượng: {item.quantity} - Giá:{' '}
+                                                {item.product_price.toLocaleString('vi-VN', {
+                                                    style: 'currency',
+                                                    currency: 'VND',
+                                                })}
+                                            </span>
+                                        </li>
+
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className="text-gray-600">Không có sản phẩm nào trong đơn hàng này.</p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

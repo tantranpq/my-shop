@@ -1,10 +1,10 @@
 // app/login/page.tsx
 "use client";
 import { useState, Suspense, useEffect } from 'react';
-import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react'; // Import useSessionContext
+import { useSupabaseClient, useUser, useSessionContext } from '@supabase/auth-helpers-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'sonner'; // Import toast
+import { toast } from 'sonner';
 
 // Component để chứa logic client-side và sử dụng useSearchParams/useUser
 function LoginFormContent() {
@@ -16,47 +16,38 @@ function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useUser();
-  const { isLoading: isLoadingSession } = useSessionContext(); // Theo dõi trạng thái session
+  const { isLoading: isLoadingSession } = useSessionContext();
 
   // useEffect để kiểm tra trạng thái đăng nhập
   useEffect(() => {
     // Chỉ chạy khi user và session đã tải xong
     if (!isLoadingSession && user) {
-      // Fetch profile để lấy role và kiểm tra thông tin đầy đủ
-      const fetchUserProfile = async () => {
+      const returnTo = searchParams.get('returnTo'); // Lấy returnTo từ query parameter
+
+      // Fetch profile để lấy role
+      const fetchUserProfileRole = async () => {
         const { data: profile, error: profileError } = await supabaseClient
           .from('profiles')
-          .select('full_name, phone, address, role')
+          .select('role') // Chỉ cần lấy role
           .eq('id', user.id)
           .single();
 
         if (profileError) {
-          console.error('Lỗi khi tải profile:', profileError);
-          // Xử lý lỗi, có thể đăng xuất hoặc chuyển hướng về trang lỗi
-          toast.error('Không thể tải thông tin người dùng. Vui lòng thử lại.');
+          console.error('Lỗi khi tải role người dùng:', profileError);
+          toast.error('Không thể tải thông tin vai trò người dùng. Vui lòng thử lại.');
+          // Nếu có lỗi, vẫn chuyển hướng về returnTo để không kẹt người dùng
+          router.replace(returnTo || '/profile');
           return;
         }
 
-        const isProfileIncomplete = !profile.full_name || !profile.phone || !profile.address;
-        const returnTo = searchParams.get('returnTo');
-
-        if (profile.role === 'admin' || profile.role === 'staff') {
-          if (isProfileIncomplete) {
-            toast.info('Vui lòng hoàn tất thông tin cá nhân của quản trị viên/nhân viên.');
-            router.replace('/admin/profile-setup');
-          } else {
-            router.replace('/admin/dashboard');
-          }
-        } else { // 'user'
-          if (isProfileIncomplete) {
-            toast.info('Vui lòng hoàn tất thông tin cá nhân của bạn.');
-            router.replace('/profile-setup'); // Chuyển hướng đến trang thiết lập profile cho user
-          } else {
-            router.replace(returnTo || '/profile'); // Chuyển hướng đến profile hoặc trang yêu cầu
-          }
+        // ĐÃ SỬA: Loại bỏ logic kiểm tra profile incomplete và chuyển hướng bắt buộc
+        if (profile?.role === 'admin' || profile?.role === 'staff') {
+          router.replace('/admin/dashboard'); // Admin/staff luôn về dashboard
+        } else { // 'user' role hoặc chưa có role (mặc định user)
+          router.replace(returnTo || '/profile'); // Chuyển hướng về trang yêu cầu hoặc /profile
         }
       };
-      fetchUserProfile();
+      fetchUserProfileRole();
     }
   }, [user, router, searchParams, supabaseClient, isLoadingSession]);
 
@@ -86,7 +77,7 @@ function LoginFormContent() {
     const { error: authError } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`, // Đảm bảo URL này khớp với Redirect URL trong Supabase
+        redirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent(searchParams.get('returnTo') || '/')}`,
       },
     });
 
@@ -97,8 +88,8 @@ function LoginFormContent() {
     setLoading(false);
   };
 
-  // Nếu đang tải phiên hoặc đã có user và đang chờ kiểm tra profile, hiển thị loading
-  if (isLoadingSession || (user && !user.user_metadata?.profile_checked)) {
+  // Nếu đang tải phiên hoặc đã có user và đang chờ kiểm tra role (chứ không phải profile_checked)
+  if (isLoadingSession || (user && !user.email)) { // Một cách đơn giản để check nếu user object chưa fully loaded
     return (
       <div className="flex justify-center items-center h-screen bg-gray-100 text-lg text-gray-700">
         Đang kiểm tra trạng thái đăng nhập...
@@ -171,13 +162,9 @@ function LoginFormContent() {
 }
 
 // Wrapper component để bọc LoginFormContent trong Suspense
-// Điều này là cần thiết khi sử dụng useSearchParams trong một Client Component
 export default function LoginPageWrapper() {
   return (
     <div className="flex justify-center items-center h-screen bg-gray-100">
-      {/* Bọc LoginFormContent trong Suspense. 
-        useSearchParams yêu cầu Suspense boundary trong Next.js App Router 
-        nếu nó được sử dụng trong Client Component */}
       <Suspense fallback={<div>Đang tải trang đăng nhập...</div>}>
         <LoginFormContent />
       </Suspense>

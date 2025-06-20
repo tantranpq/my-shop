@@ -1,38 +1,58 @@
 'use client';
 
-import { useParams, useSearchParams } from 'next/navigation'; // Import useSearchParams
+import { useParams, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import Link from 'next/link';
-import Image from 'next/image'; // Import Image component
+import Image from 'next/image';
+import { toast } from 'sonner';
 
 interface OrderItem {
-  id: string;
-  created_at: string;
-  order_id: string;
   product_id: string;
   product_name: string;
   product_price: number;
   quantity: number;
+  product_image?: string | null;
+}
+
+// Interface để mô tả cấu trúc dữ liệu trả về từ Supabase SELECT query
+interface SupabaseOrderData {
+  id: string;
+  created_at: string;
+  customer_id: string;
+  total_amount: number;
+  payment_method: 'cod' | 'online';
+  order_source: string;
+  creator_profile_id: string | null;
+  status: string;
+  items: OrderItem[];
+  // ĐÃ SỬA: Định nghĩa `customers` là một đối tượng hoặc null
+  customers: {
+    full_name: string;
+    email: string;
+    phone: string | null;
+    address: string | null;
+  } | null; // Đã thay đổi từ `{ ... }[]` thành `{ ... } | null`
 }
 
 interface Order {
   id: string;
   created_at: string;
+  customer_id: string;
   customer_name: string;
   customer_email: string;
   customer_phone: string | null;
   customer_address: string | null;
-  user_id: string;
-  payment_method: 'cod' | 'online'; // Thêm trường payment_method
-  total_amount: number; // Thêm trường total_amount
-  order_items: OrderItem[];
+  user_id: string | null; // creator_profile_id
+  payment_method: 'cod' | 'online';
+  total_amount: number;
+  items: OrderItem[];
 }
 
 export default function OrderSuccessPage() {
   const { id } = useParams();
-  const searchParams = useSearchParams(); // Sử dụng useSearchParams để lấy query param
-  const paymentMethod = searchParams.get('paymentMethod'); // Lấy paymentMethod từ URL
+  const searchParams = useSearchParams();
+  const paymentMethodFromUrl = searchParams.get('paymentMethod');
   const supabase = useSupabaseClient();
   const user = useUser();
 
@@ -43,48 +63,92 @@ export default function OrderSuccessPage() {
   useEffect(() => {
     const fetchOrder = async () => {
       if (!id) {
-        setError('Không tìm thấy ID đơn hàng.');
+        setError('Không tìm thấy ID đơn hàng trong URL.');
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error: fetchError } = await supabase
         .from('orders')
-        // Thêm payment_method và total_amount vào select
         .select(`
           id,
           created_at,
-          customer_name,
-          customer_email,
-          customer_phone,
-          customer_address,
-          user_id,
-          payment_method,
+          customer_id,
           total_amount,
-          order_items (
-            id,
-            created_at,
-            order_id,
-            product_id,
-            product_name,
-            product_price,
-            quantity
+          payment_method,
+          order_source,
+          creator_profile_id,
+          status,
+          items,
+          customers (
+            full_name,
+            email,
+            phone,
+            address
           )
         `)
         .eq('id', id)
         .single();
 
-      if (error) {
-        console.error('Lỗi khi lấy đơn hàng:', error);
-        setError('Không thể tải thông tin đơn hàng.');
-      } else {
-        setOrder(data as Order);
-      }
+      if (fetchError) {
+        console.error('Lỗi khi lấy đơn hàng:', fetchError);
+        setError('Không thể tải thông tin đơn hàng hoặc đơn hàng không tồn tại.');
+        setOrder(null);
+      } else if (data) {
+        // --- BẮT ĐẦU DEBUG LOG ---
+        console.log('Dữ liệu thô từ Supabase (OrderSuccessPage):', data);
+        // --- KẾT THÚC DEBUG LOG ---
 
+        const rawData: SupabaseOrderData = data as unknown as SupabaseOrderData;
+
+        // Ánh xạ dữ liệu từ kết quả Supabase sang interface Order
+        const fetchedOrder: Order = {
+          id: rawData.id,
+          created_at: rawData.created_at,
+          customer_id: rawData.customer_id,
+          total_amount: rawData.total_amount,
+          payment_method: rawData.payment_method,
+          user_id: rawData.creator_profile_id,
+          // ĐÃ SỬA: Truy cập trực tiếp thuộc tính từ đối tượng `customers`
+          customer_name: rawData.customers?.full_name || '',
+          customer_email: rawData.customers?.email || '',
+          customer_phone: rawData.customers?.phone || null,
+          customer_address: rawData.customers?.address || null,
+          items: rawData.items || [],
+        };
+        setOrder(fetchedOrder);
+        setError(null);
+      } else {
+        setError('Không tìm thấy đơn hàng.');
+        setOrder(null);
+      }
       setLoading(false);
     };
 
     fetchOrder();
+
+    // Setup Realtime subscription
+    if (id) {
+      const orderChannel = supabase
+        .channel(`order_${id}_changes`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${id}` },
+          (payload) => {
+            console.log('Realtime order change:', payload);
+            if (payload.eventType === 'UPDATE') {
+              toast.info('Trạng thái đơn hàng đã được cập nhật.');
+              fetchOrder();
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(orderChannel);
+      };
+    }
+
   }, [id, supabase]);
 
   if (loading) return <div className="p-6 text-center">Đang tải đơn hàng...</div>;
@@ -92,31 +156,26 @@ export default function OrderSuccessPage() {
   if (error || !order) {
     return (
       <div className="p-6 text-center">
-        {error || 'Không tìm thấy đơn hàng.'}
-        <br />
-        <Link href="/cart" className="text-blue-500 underline mt-4 inline-block">Quay lại giỏ hàng</Link>
+        <p className="text-red-600 text-xl font-semibold mb-4">{error || 'Không tìm thấy đơn hàng.'}</p>
+        <Link href="/products" className="text-blue-500 underline mt-4 inline-block">Quay lại mua sắm</Link>
       </div>
     );
   }
 
-  // Đảm bảo rằng chỉ người dùng đã đặt hàng mới có thể xem
-  // Hoặc bạn có thể bỏ qua check này nếu muốn admin cũng xem được
-  if (!user || user.id !== order.user_id) {
+  // --- QUYỀN TRUY CẬP ---
+  const canViewOrder = user
+    ? (order.user_id === user.id)
+    : (order.user_id === null);
+
+  if (!canViewOrder) {
     return (
       <div className="p-6 text-center">
-        Bạn không có quyền xem đơn hàng này.
-        <br />
-        <Link href="/cart" className="text-blue-500 underline mt-4 inline-block">Quay lại giỏ hàng</Link>
+        <p className="text-red-600 text-xl font-semibold mb-4">Bạn không có quyền xem đơn hàng này.</p>
+        <Link href="/products" className="text-blue-500 underline mt-4 inline-block">Quay lại mua sắm</Link>
       </div>
     );
   }
 
-  // totalAmount giờ đã được lấy trực tiếp từ order.total_amount
-  // Nếu bạn vẫn muốn tính lại từ order_items, bạn có thể giữ lại đoạn code cũ:
-  // const calculatedTotalAmount = order.order_items.reduce(
-  //   (sum, item) => sum + item.product_price * item.quantity,
-  //   0
-  // );
 
   return (
     <div className="flex justify-center items-center p-6 bg-gray-100 min-h-screen">
@@ -125,53 +184,60 @@ export default function OrderSuccessPage() {
         <p className="text-center mb-6">Mã đơn hàng: <strong>#{order.id}</strong></p>
 
         {/* Thông báo và hướng dẫn dựa trên phương thức thanh toán */}
-        {paymentMethod === 'cod' && (
+        {order.payment_method === 'cod' && (
           <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4" role="alert">
             <p className="font-bold">Đơn hàng của bạn đã được tiếp nhận.</p>
             <p>Chúng tôi sẽ gọi điện thoại để xác nhận đơn hàng sớm nhất.</p>
           </div>
         )}
 
-        {paymentMethod === 'online' && (
+        {order.payment_method === 'online' && (
           <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
             <p className="font-bold">Đơn hàng của bạn đã được tạo.</p>
             <p>Vui lòng hoàn tất thanh toán trong vòng **1 giờ** để đơn hàng không bị hủy.</p>
           </div>
         )}
 
-        <h2 className="font-semibold mb-2">Thông tin khách hàng</h2>
+        {/* Đã đổi tiêu đề thành "Thông tin đơn hàng" */}
+        <h2 className="font-semibold mb-2">Thông tin đơn hàng</h2>
         <ul className="mb-4 text-sm">
-          <li>👤 {order.customer_name}</li>
-          <li>📧 {order.customer_email}</li>
-          {order.customer_phone && <li>📞 {order.customer_phone}</li>}
-          {order.customer_address && <li>🏠 {order.customer_address}</li>}
-          <li>📅 {new Date(order.created_at).toLocaleString()}</li>
+          {/* Đã sửa: Luôn hiển thị các trường, hiển thị "Không có" nếu giá trị rỗng */}
+          <li>👤 Tên khách hàng: {order.customer_name || 'Không có'}</li>
+          <li>📧 Email: {order.customer_email || 'Không có'}</li>
+          <li>📞 Số điện thoại: {order.customer_phone || 'Không có'}</li>
+          <li>🏠 Địa chỉ: {order.customer_address || 'Không có'}</li>
+          <li>📅 Thời gian đặt: {new Date(order.created_at).toLocaleString('vi-VN')}</li>
         </ul>
 
         <h2 className="font-semibold mb-2">Sản phẩm đã đặt</h2>
         <div className="space-y-2 mb-4">
-          {order.order_items.map((item) => (
-            <div key={item.id} className="flex justify-between border-b pb-1">
-              <div>{item.product_name} × {item.quantity}</div>
-              <div>{item.product_price.toLocaleString()} đ</div>
+          {order.items.map((item) => (
+            <div key={item.product_id} className="flex justify-between border-b pb-1 items-center">
+              {item.product_image && (
+                <Image src={item.product_image} alt={item.product_name} width={48} height={48} className="w-12 h-12 object-cover rounded mr-2" />
+              )}
+              <div className="flex-grow">
+                {item.product_name} × {item.quantity}
+              </div>
+              <div>{(typeof item.product_price === 'number' ? item.product_price : 0).toLocaleString('vi-VN')} đ</div>
             </div>
           ))}
         </div>
 
         <div className="text-right font-bold text-lg mb-6">
-          Tổng cộng: {order.total_amount.toLocaleString()} đ {/* Hiển thị total_amount từ order */}
+          Tổng cộng: {order.total_amount.toLocaleString('vi-VN')} đ
         </div>
 
         {/* Hiển thị chi tiết thanh toán Online nếu phương thức là 'online' */}
-        {paymentMethod === 'online' && (
+        {order.payment_method === 'online' && (
           <div className="mt-6 p-4 border border-gray-200 rounded-md bg-yellow-50 text-center">
             <h2 className="text-xl font-bold mb-3 text-gray-800">Thông tin chuyển khoản</h2>
             <p className="mb-4">
-              Vui lòng chuyển khoản tổng số tiền <span className="font-bold text-lg text-blue-700">{order.total_amount.toLocaleString()} đ</span> vào tài khoản sau:
+              Vui lòng chuyển khoản tổng số tiền <span className="font-bold text-lg text-blue-700">{order.total_amount.toLocaleString('vi-VN')} đ</span> vào tài khoản sau:
             </p>
             <div className="flex justify-center mb-6">
               <Image
-                src="/images/qr-code-placeholder.png" // Đặt đường dẫn chính xác đến ảnh QR của bạn
+                src="/images/qr-code-placeholder.png"
                 alt="Mã QR thanh toán"
                 width={200}
                 height={200}

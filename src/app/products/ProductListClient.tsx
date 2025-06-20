@@ -153,7 +153,24 @@ export default function ProductPageClient() {
             toast.error('Không thể mua ngay sản phẩm này (thiếu slug).');
             return;
         }
-        router.push(`/checkout?items=${product.slug}:1`);
+
+        // Tạo một mảng chứa đối tượng sản phẩm duy nhất để truyền qua URL
+        const itemToBuy = {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            image: product.image,
+            slug: product.slug,
+            quantity: 1, // Mua ngay thường là 1 sản phẩm
+        };
+
+        // Chuyển đổi mảng đối tượng thành chuỗi JSON và mã hóa URL
+        const jsonString = JSON.stringify([itemToBuy]); // Phải là một MẢNG chứa đối tượng sản phẩm
+        const encodedUrl = encodeURIComponent(jsonString);
+        console.log("ProductPageClient: JSON string for Buy Now:", jsonString); // Debug log
+        console.log("ProductPageClient: Encoded URL for Buy Now:", encodedUrl); // Debug log
+
+        router.push(`/checkout?items=${encodedUrl}`); // Cập nhật cách truyền tham số
     };
 
     const handleToggleFavorite = async (product: Product) => {

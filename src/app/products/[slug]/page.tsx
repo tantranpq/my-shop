@@ -1,3 +1,4 @@
+// app/products/[slug]/page.tsx
 "use client";
 
 import '@/app/globals.css';
@@ -36,21 +37,6 @@ export default function ProductDetail() {
     const [startIndex, setStartIndex] = useState(0);
     const visibleThumbnailsCount = 3;
     const [showZoomModal, setShowZoomModal] = useState(false);
-
-    // Thông báo toast sẽ được quản lý bởi `sonner` trực tiếp, không cần state `notificationMessage` và `showNotification` nữa
-    // const [notificationMessage, setNotificationMessage] = useState<string>('');
-    // const [showNotification, setShowNotification] = useState<boolean>(false);
-
-    // Function to show notification - will use toast from sonner
-    // const triggerNotification = useCallback((message: string) => {
-    //     setNotificationMessage(message);
-    //     setShowNotification(true);
-    //     const timer = setTimeout(() => {
-    //         setShowNotification(false);
-    //         setNotificationMessage('');
-    //     }, 3000); // Notification disappears after 3 seconds
-    //     return () => clearTimeout(timer); // Cleanup on unmount or re-render
-    // }, []);
 
     const fetchProduct = useCallback(async () => {
         if (!slug) {
@@ -240,7 +226,24 @@ export default function ProductDetail() {
             toast.error('Không thể mua ngay sản phẩm này (thiếu slug).');
             return;
         }
-        router.push(`/checkout?items=${productToBuy.slug}:1`);
+
+        // Tạo một mảng chứa đối tượng sản phẩm duy nhất để truyền qua URL
+        const itemToBuy = {
+            id: productToBuy.id,
+            name: productToBuy.name,
+            price: productToBuy.price,
+            image: productToBuy.image,
+            slug: productToBuy.slug,
+            quantity: 1, // Mua ngay thường là 1 sản phẩm
+        };
+
+        // Chuyển đổi mảng đối tượng thành chuỗi JSON và mã hóa URL
+        const jsonString = JSON.stringify([itemToBuy]); // Phải là một MẢNG chứa đối tượng sản phẩm
+        const encodedUrl = encodeURIComponent(jsonString);
+        console.log("ProductDetail: JSON string for Buy Now:", jsonString); // Debug log
+        console.log("ProductDetail: Encoded URL for Buy Now:", encodedUrl); // Debug log
+
+        router.push(`/checkout?items=${encodedUrl}`); // Cập nhật cách truyền tham số
     };
 
     const currentMainImageUrl = (product?.images && mainImageIndex !== -1 && product.images[mainImageIndex])
@@ -446,14 +449,6 @@ export default function ProductDetail() {
                     </div>
                 </div>
             )}
-
-            {/* Sonner toast container (assuming you have this in your root layout or similar) */}
-            {/* No need for a custom notification component anymore if using Sonner */}
-            {/* {showNotification && (
-                <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-md shadow-lg z-50 animate-fade-in-out">
-                    <p className="text-base font-medium">{notificationMessage}</p>
-                </div>
-            )} */}
         </>
     );
 }

@@ -2,12 +2,11 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { useCart } from '@/context/CartContext';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase'; // Assuming 'supabase' is the client instance
 import NextImage from 'next/image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -147,7 +146,7 @@ export default function CheckoutClient() {
   const pathname = usePathname(); // For returnTo in login redirect
   const supabaseClient = useSupabaseClient();
   const user = useUser();
-  const { cart, setCart } = useCart(); // GIỮ NGUYÊN CART LOGIC TỪ CODE BẠN CUNG CẤP
+  const { setCart } = useCart(); // GIỮ NGUYÊN CART LOGIC TỪ CODE BẠN CUNG CẤP
   const queryClient = useQueryClient(); // For invalidating queries
 
   const itemsParam = searchParams.get('items');

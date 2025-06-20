@@ -52,7 +52,6 @@ interface Order {
 export default function OrderSuccessPage() {
   const { id } = useParams();
   const searchParams = useSearchParams();
-  const paymentMethodFromUrl = searchParams.get('paymentMethod');
   const supabase = useSupabaseClient();
   const user = useUser();
 

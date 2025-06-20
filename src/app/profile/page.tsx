@@ -251,17 +251,18 @@ function ProfileContent() {
                 `);
 
             if (error) throw error;
-            return data.map((order: any) => ({
-                id: order.id,
-                customer_id: order.customer_id,
-                total_amount: order.total_amount,
-                payment_method: order.payment_method,
-                status: order.status,
-                created_at: order.created_at,
-                expires_at: order.expires_at,
-                creator_profile_id: order.creator_profile_id,
-                items: order.items || [],
-            }));
+            return data.map((order: Order) => ({
+  id: order.id,
+  customer_id: order.customer_id,
+  total_amount: order.total_amount,
+  payment_method: order.payment_method,
+  status: order.status,
+  created_at: order.created_at,
+  expires_at: order.expires_at,
+  creator_profile_id: order.creator_profile_id,
+  items: order.items || [],
+}));
+
         },
         enabled: !!user && !isLoadingSession,
         staleTime: 1000 * 60 * 2,
@@ -374,7 +375,7 @@ function ProfileContent() {
                 const newFileName = `${user.id}/${uuidv4()}.${fileExtension}`; // Unique path for each user's avatar
 
                 // Upload the new avatar
-                const { data: uploadData, error: uploadError } = await supabaseClient.storage
+                const { error: uploadError } = await supabaseClient.storage
                     .from('avatars') // Your storage bucket name
                     .upload(newFileName, avatarFile, {
                         cacheControl: '3600',

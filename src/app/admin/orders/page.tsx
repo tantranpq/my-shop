@@ -95,17 +95,7 @@ const PAYMENT_STATUS_DROPDOWN_OPTIONS: { [key: string]: { text: string; colorCla
     'unknown': { text: 'Không rõ trạng thái', colorClass: 'bg-gray-100 text-gray-800' },
 };
 
-// Ánh xạ cho hiển thị đơn giản trong ô bảng (Không còn được dùng trực tiếp bên dưới dropdown)
-const SIMPLIFIED_PAYMENT_STATUS_DISPLAY_MAP: { [key: string]: string } = {
-    'pending_online': 'Đang chờ TT',
-    'unconfirmed_cod': 'Đang chờ TT',
-    'confirmed': 'Đã thanh toán',
-    'paid': 'Đã thanh toán',
-    'completed': 'Đã thanh toán',
-    'failed': 'Thất bại',
-    'refunded': 'Hoàn tiền',
-    'unknown': 'Không rõ',
-};
+
 
 const FILTER_PAYMENT_STATUS_OPTIONS = [
     { value: 'all', label: 'Tất cả' },

@@ -10,13 +10,6 @@ import { toast } from 'sonner';
 import NextImage from 'next/image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-// Định nghĩa các interface cho dữ liệu từ DB (cho useQuery)
-interface ProfileData { // Dữ liệu từ bảng 'profiles'
-  id: string;
-  full_name: string | null;
-  phone: string | null;
-  email: string | null;
-}
 
 interface CustomerData { // Dữ liệu từ bảng 'customers' (địa chỉ)
   id: string; // customer_id (ID của bản ghi địa chỉ)

@@ -100,7 +100,7 @@ const translateOrderStatus = (status: Order['status']): string => {
         case 'pending': return 'Chờ xác nhận';
         case 'delivery': return 'Chờ giao hàng';
         case 'delivered': return 'Đã giao';
-        case 'returned': 'Trả hàng';
+        case 'returned': return 'Trả hàng';
         case 'cancelled': return 'Đã huỷ';
         default: return status;
     }

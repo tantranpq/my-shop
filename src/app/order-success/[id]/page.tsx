@@ -51,7 +51,6 @@ interface Order {
 
 export default function OrderSuccessPage() {
   const { id } = useParams();
-  const searchParams = useSearchParams();
   const supabase = useSupabaseClient();
   const user = useUser();
 

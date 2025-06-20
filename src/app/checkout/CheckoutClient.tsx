@@ -441,6 +441,16 @@ export default function CheckoutClient() {
       product_image: item.image,
     }));
 
+    // Determine payment_status based on paymentMethod
+    let paymentStatus: string;
+    if (paymentMethod === 'cod') {
+        paymentStatus = 'unconfirmed_cod';
+    } else if (paymentMethod === 'online') {
+        paymentStatus = 'pending_online';
+    } else {
+        paymentStatus = 'pending'; // Default or fallback status
+    }
+
     try {
       // Allow guest users to place orders without a user ID if needed by the RPC.
       // If user is null, user?.id will be undefined, and then converted to null.
@@ -456,6 +466,7 @@ export default function CheckoutClient() {
         p_selected_customer_id: deliveryInfo.customerId, // Pass the selected customerId (will be null for guests)
         p_order_source: 'web',
         p_creator_profile_id: user?.id || null, // Updated: Allow null for guest users
+        p_payment_status: paymentStatus, // NEW: Pass the determined payment status
       });
 
       if (error) {

@@ -124,15 +124,17 @@ const getSelectValueForPaymentStatusDropdown = (paymentStatus: string | null): s
 interface CountdownTimerProps {
     expiresAt: string | null;
     paymentMethod: string;
-    status: string | null;
+    paymentStatus: string; // Changed from 'status' to 'paymentStatus'
 }
 
-const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMethod, status }) => {
+const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMethod, paymentStatus }) => {
     const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
 
     useEffect(() => {
-        if (paymentMethod !== 'online' || !expiresAt) {
-            setRemainingSeconds(null);
+        // Only show countdown for 'online' payment method and if expiresAt is provided
+        // Also, stop countdown if paymentStatus is 'paid' or 'completed'
+        if (paymentMethod !== 'online' || !expiresAt || paymentStatus === 'paid' || paymentStatus === 'completed') {
+            setRemainingSeconds(null); // Reset or hide countdown
             return;
         }
 
@@ -144,25 +146,41 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMetho
             setRemainingSeconds(diffSeconds);
         };
 
-        calculateRemaining();
+        calculateRemaining(); // Initial calculation immediately
 
+        // Update every second
         const timer = setInterval(calculateRemaining, 1000);
 
+        // Cleanup interval on component unmount or prop change
         return () => clearInterval(timer);
-    }, [expiresAt, paymentMethod]);
+    }, [expiresAt, paymentMethod, paymentStatus]); // Re-run effect if expiresAt, paymentMethod, or paymentStatus changes
 
+    // If not an online payment, display N/A
     if (paymentMethod !== 'online') {
         return <span className="text-gray-500">N/A</span>;
     }
 
+    // If paymentStatus is 'paid', display 'Đã thanh toán' (or similar)
+    if (paymentStatus === 'paid') {
+        return <span className="text-green-600 font-bold">Đã thanh toán</span>;
+    }
+
+    // If paymentStatus is 'completed', display 'Đã hoàn thành'
+    if (paymentStatus === 'completed') {
+        return <span className="text-purple-600 font-bold">Đã hoàn thành</span>;
+    }
+
+    // If remainingSeconds is null (e.g., expiresAt was null initially, or still calculating)
     if (remainingSeconds === null) {
         return <span className="text-gray-500">Đang tính...</span>;
     }
 
+    // If time has run out
     if (remainingSeconds <= 0) {
         return <span className="text-red-600 font-bold">Hết hạn</span>;
     }
 
+    // Format remaining time
     const hours = Math.floor(remainingSeconds / 3600);
     const minutes = Math.floor((remainingSeconds % 3600) / 60);
     const seconds = remainingSeconds % 60;
@@ -171,7 +189,8 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({ expiresAt, paymentMetho
     const formattedMinutes = String(minutes).padStart(2, '0');
     const formattedSeconds = String(seconds).padStart(2, '0');
 
-    if (status === 'pending') {
+    // Only display countdown if paymentStatus is 'pending_online'
+    if (paymentStatus === 'pending_online') {
         return (
             <span className="font-medium text-blue-600">
                 {formattedHours}:{formattedMinutes}:{formattedSeconds}
@@ -286,7 +305,7 @@ export default function AdminOrdersPage() {
     const queryClient = useQueryClient();
 
     const [userRole, setUserRole] = useState<'user' | 'admin' | 'staff' | null>(null);
-    const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set());
+    const [updatingOrderIds, setUpdatingOrderIds] = useState<Set<string>>(new Set()); // Fixed: Correct useState for Set
     const [updateError, setUpdateError] = useState<string | null>(null);
 
     // States cho các giá trị input (cập nhật tức thì khi gõ, dùng để lọc client-side)
@@ -392,7 +411,7 @@ export default function AdminOrdersPage() {
             return;
         }
 
-        setUpdatingOrderIds(prev => new Set(prev).add(orderId));
+        setUpdatingOrderIds(prev => new Set(prev).add(orderId)); // Correct usage
         setUpdateError(null);
 
         const { error: updateErrorDb } = await supabaseClient
@@ -400,11 +419,12 @@ export default function AdminOrdersPage() {
             .update({ status: newStatus === 'unknown' ? null : newStatus })
             .eq('id', orderId);
 
-        setUpdatingOrderIds(prev => {
+        setUpdatingOrderIds(prev => { // Correct usage
             const newSet = new Set(prev);
             newSet.delete(orderId);
             return newSet;
         });
+
 
         if (updateErrorDb) {
             console.error('Lỗi khi cập nhật trạng thái đơn hàng:', updateErrorDb);
@@ -422,7 +442,7 @@ export default function AdminOrdersPage() {
             return;
         }
 
-        setUpdatingOrderIds(prev => new Set(prev).add(orderId));
+        setUpdatingOrderIds(prev => new Set(prev).add(orderId)); // Correct usage
         setUpdateError(null);
 
         const { error: updateErrorDb } = await supabaseClient
@@ -430,11 +450,12 @@ export default function AdminOrdersPage() {
             .update({ payment_status: newPaymentStatus === 'unknown' ? null : newPaymentStatus })
             .eq('id', orderId);
 
-        setUpdatingOrderIds(prev => {
+        setUpdatingOrderIds(prev => { // Correct usage
             const newSet = new Set(prev);
             newSet.delete(orderId);
             return newSet;
         });
+
 
         if (updateErrorDb) {
             console.error('Lỗi khi cập nhật trạng thái thanh toán:', updateErrorDb);
@@ -560,6 +581,27 @@ export default function AdminOrdersPage() {
         orders.forEach(order => methods.add(order.payment_method));
         return Array.from(methods);
     }, [orders]);
+
+    // Lọc các tùy chọn trạng thái thanh toán cho dropdown trong bảng
+    const getFilteredPaymentStatusOptionsForOrder = useMemo(() => (paymentMethod: string) => {
+        let options = [...UPDATABLE_PAYMENT_STATUSES]; // Bắt đầu với tất cả các trạng thái có thể cập nhật
+
+        if (paymentMethod === 'online') {
+            options = options.filter(status =>
+                status !== 'confirmed' && status !== 'unconfirmed_cod'
+            );
+        } else if (paymentMethod === 'cod') {
+            options = options.filter(status =>
+                status !== 'pending_online' && status !== 'failed'
+            );
+        }
+
+        // Ánh xạ các key trạng thái đã lọc sang các đối tượng tùy chọn dropdown đầy đủ
+        return options.map(status => ({
+            value: status,
+            label: PAYMENT_STATUS_DROPDOWN_OPTIONS[status]?.text || status
+        }));
+    }, []); // Dependency array trống vì UPDATABLE_PAYMENT_STATUSES không thay đổi
 
     // --- Render logic ---
     if (isLoadingSession || isLoadingProfile) {
@@ -784,9 +826,9 @@ export default function AdminOrdersPage() {
                                                 onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value)}
                                                 disabled={updatingOrderIds.has(order.id)}
                                             >
-                                                {UPDATABLE_PAYMENT_STATUSES.map((pStatus) => (
-                                                    <option key={pStatus} value={pStatus}>
-                                                        {PAYMENT_STATUS_DROPDOWN_OPTIONS[pStatus]?.text || pStatus}
+                                                {getFilteredPaymentStatusOptionsForOrder(order.payment_method).map((option) => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
                                                     </option>
                                                 ))}
                                             </select>
@@ -795,7 +837,7 @@ export default function AdminOrdersPage() {
                                             <CountdownTimer
                                                 expiresAt={order.expires_at}
                                                 paymentMethod={order.payment_method}
-                                                status={order.status}
+                                                paymentStatus={order.payment_status} // Updated prop name and value
                                             />
                                         </td>
                                         {/* <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -846,7 +888,7 @@ export default function AdminOrdersPage() {
                                             <CountdownTimer
                                                 expiresAt={selectedOrder.expires_at}
                                                 paymentMethod={selectedOrder.payment_method}
-                                                status={selectedOrder.status}
+                                                paymentStatus={selectedOrder.payment_status} // Updated prop name and value
                                             />
                                         </p>
                                     )}

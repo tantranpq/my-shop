@@ -17,6 +17,14 @@ interface OrderItem {
     product_image: string | null; // Cập nhật tên cột (tương ứng product_imag trong DB nếu giữ nguyên)
 }
 
+// Định nghĩa kiểu dữ liệu cho thông tin khách hàng từ DB
+interface CustomerInfo {
+    full_name: string | null;
+    email: string | null;
+    phone: string;
+    address: string | null;
+}
+
 // Định nghĩa kiểu dữ liệu cho một tab đơn hàng mới
 interface NewOrderTab {
     tabId: string; // Unique ID for the tab
@@ -27,7 +35,9 @@ interface NewOrderTab {
     paymentMethod: string; // Tên cột mới
     items: OrderItem[];
     searchProductTerm: string;
-    searchResults: { id: string; name: string; price: number; images: string[] | null; stock_quantity: number }[]; // **Đã sửa: stock_quantity**
+    searchResults: { id: string; name: string; price: number; image: string | null; stock_quantity: number }[];
+    customerSearchPhone: string;
+    customerMatchingResults: CustomerInfo[];
 }
 
 export default function SalesPage() {
@@ -40,7 +50,7 @@ export default function SalesPage() {
     const [currentTabId, setCurrentTabId] = useState<string>(''); // ID of the currently active tab
     const [orderTabs, setOrderTabs] = useState<NewOrderTab[]>([]); // Array to hold multiple order tabs
 
-    // Handlers for managing tabs - Đặt các hàm useCallback lên đầu để tránh lỗi 'used before declaration'
+    // Handlers for managing tabs
     const handleAddTab = useCallback(() => {
         const newTabId = Math.random().toString(36).substring(2, 11);
         const newTab: NewOrderTab = {
@@ -53,14 +63,15 @@ export default function SalesPage() {
             items: [],
             searchProductTerm: '',
             searchResults: [],
+            customerSearchPhone: '',
+            customerMatchingResults: [],
         };
         setOrderTabs(prevTabs => [...prevTabs, newTab]);
         setCurrentTabId(newTabId);
-    }, []); // Không có dependencies vì nó không sử dụng state hay props bên ngoài
+    }, []);
 
     const handleRemoveTab = useCallback((tabIdToRemove: string) => {
         if (orderTabs.length === 1) {
-            // If only one tab left, just reset it instead of removing
             setOrderTabs([
                 {
                     tabId: Math.random().toString(36).substring(2, 11),
@@ -72,27 +83,43 @@ export default function SalesPage() {
                     items: [],
                     searchProductTerm: '',
                     searchResults: [],
+                    customerSearchPhone: '',
+                    customerMatchingResults: [],
                 }
             ]);
-            setCurrentTabId(orderTabs[0].tabId);
+            setOrderTabs(prevTabs => {
+                const newTabs = prevTabs.filter(tab => tab.tabId !== tabIdToRemove);
+                if (newTabs.length === 0) {
+                    const newEmptyTab: NewOrderTab = {
+                        tabId: Math.random().toString(36).substring(2, 11),
+                        customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
+                        paymentMethod: 'cash', items: [], searchProductTerm: '', searchResults: [],
+                        customerSearchPhone: '', customerMatchingResults: []
+                    };
+                    setCurrentTabId(newEmptyTab.tabId);
+                    return [newEmptyTab];
+                }
+                setCurrentTabId(newTabs[0].tabId);
+                return newTabs;
+            });
             return;
         }
 
         setOrderTabs(prevTabs => prevTabs.filter(tab => tab.tabId !== tabIdToRemove));
-        // Switch to another tab if the current one is removed
         if (currentTabId === tabIdToRemove) {
             const remainingTabs = orderTabs.filter(tab => tab.tabId !== tabIdToRemove);
             if (remainingTabs.length > 0) {
                 setCurrentTabId(remainingTabs[0].tabId);
+            } else {
+                handleAddTab();
             }
         }
-    }, [currentTabId, orderTabs]); // Added orderTabs to dependencies
+    }, [currentTabId, orderTabs, handleAddTab]);
 
     const handleTabChange = useCallback((tabId: string) => {
         setCurrentTabId(tabId);
     }, []);
 
-    // Callbacks to update current tab's state
     const updateCurrentTab = useCallback((updater: (prevTab: NewOrderTab) => NewOrderTab) => {
         setOrderTabs(prevTabs =>
             prevTabs.map(tab => (tab.tabId === currentTabId ? updater(tab) : tab))
@@ -100,11 +127,9 @@ export default function SalesPage() {
     }, [currentTabId]);
 
 
-    // Helper to get the current active tab's state
     const currentTab = orderTabs.find(tab => tab.tabId === currentTabId);
 
 
-    // Handlers for new order creation (specific to current tab)
     const handleSearchProducts = useCallback(async () => {
         if (!currentTab?.searchProductTerm.trim()) {
             updateCurrentTab(prev => ({ ...prev, searchResults: [] }));
@@ -113,7 +138,7 @@ export default function SalesPage() {
 
         const { data, error } = await supabaseClient
             .from('products')
-            .select('id, name, price, images, stock_quantity') // **Đã sửa: stock_quantity**
+            .select('id, name, price, image, stock_quantity')
             .ilike('name', `%${currentTab.searchProductTerm}%`)
             .limit(10);
 
@@ -126,11 +151,10 @@ export default function SalesPage() {
     }, [currentTab?.searchProductTerm, supabaseClient, updateCurrentTab]);
 
 
-    const handleAddProductToNewOrder = useCallback((product: { id: string; name: string; price: number; images: string[] | null; stock_quantity: number }) => { // **Đã sửa: stock_quantity**
+    const handleAddProductToNewOrder = useCallback((product: { id: string; name: string; price: number; image: string | null; stock_quantity: number }) => {
         if (!currentTab) return;
 
-        // Kiểm tra tồn kho trước khi thêm vào đơn hàng
-        if (product.stock_quantity <= 0) { // **Đã sửa: stock_quantity**
+        if (product.stock_quantity <= 0) {
             toast.error(`Sản phẩm "${product.name}" đã hết hàng.`);
             return;
         }
@@ -140,24 +164,23 @@ export default function SalesPage() {
         updateCurrentTab(prev => {
             const updatedItems = [...prev.items];
             if (existingItemIndex > -1) {
-                // Kiểm tra nếu số lượng yêu cầu vượt quá tồn kho khả dụng
-                if (updatedItems[existingItemIndex].quantity + 1 > product.stock_quantity) { // **Đã sửa: stock_quantity**
-                     toast.error(`Không đủ tồn kho cho sản phẩm "${product.name}". Chỉ còn ${product.stock_quantity} sản phẩm.`); // **Đã sửa: stock_quantity**
-                     return prev; // Trả về trạng thái trước đó nếu không đủ tồn kho
+                if (updatedItems[existingItemIndex].quantity + 1 > product.stock_quantity) {
+                     toast.error(`Không đủ tồn kho cho sản phẩm "${product.name}". Chỉ còn ${product.stock_quantity} sản phẩm.`);
+                     return prev;
                 }
                 updatedItems[existingItemIndex].quantity += 1;
             } else {
-                 if (1 > product.stock_quantity) { // Kiểm tra nếu thêm 1 sản phẩm đã vượt quá tồn kho // **Đã sửa: stock_quantity**
-                     toast.error(`Không đủ tồn kho cho sản phẩm "${product.name}". Chỉ còn ${product.stock_quantity} sản phẩm.`); // **Đã sửa: stock_quantity**
+                 if (1 > product.stock_quantity) {
+                     toast.error(`Không đủ tồn kho cho sản phẩm "${product.name}". Chỉ còn ${product.stock_quantity} sản phẩm.`);
                      return prev;
                  }
                 updatedItems.push({
-                    id: Math.random().toString(36).substring(2, 9), // Temporary unique ID for frontend list
+                    id: Math.random().toString(36).substring(2, 9),
                     product_id: product.id,
                     product_name: product.name,
                     product_price: product.price,
                     quantity: 1,
-                    product_image: product.images && product.images.length > 0 ? product.images[0] : null,
+                    product_image: product.image || null,
                 });
             }
             return { ...prev, items: updatedItems, searchProductTerm: '', searchResults: [] };
@@ -168,9 +191,6 @@ export default function SalesPage() {
     const handleQuantityChange = useCallback((itemId: string, newQuantity: number) => {
         if (!currentTab) return;
 
-        // Cần tìm sản phẩm gốc để lấy thông tin tồn kho chính xác
-        // Tốt nhất là fetch lại hoặc có một cache sản phẩm toàn diện.
-        // Tạm thời, sẽ tìm trong searchResults của tab hiện tại.
         const itemInOrder = currentTab.items.find(i => i.id === itemId);
         const productFromSearch = currentTab.searchResults.find(p => p.id === itemInOrder?.product_id);
 
@@ -178,9 +198,11 @@ export default function SalesPage() {
             ...prev,
             items: prev.items.map(item => {
                 if (item.id === itemId) {
-                    if (productFromSearch && newQuantity > productFromSearch.stock_quantity) { // **Đã sửa: stock_quantity**
-                        toast.error(`Không đủ tồn kho cho sản phẩm "${item.product_name}". Chỉ còn ${productFromSearch.stock_quantity} sản phẩm.`); // **Đã sửa: stock_quantity**
-                        return { ...item, quantity: productFromSearch.stock_quantity > 0 ? productFromSearch.stock_quantity : 1 }; // Giới hạn số lượng bằng tồn kho
+                    if (productFromSearch) {
+                        if (newQuantity > productFromSearch.stock_quantity) {
+                            toast.error(`Không đủ tồn kho cho sản phẩm "${item.product_name}". Chỉ còn ${productFromSearch.stock_quantity} sản phẩm.`);
+                            return { ...item, quantity: productFromSearch.stock_quantity > 0 ? productFromSearch.stock_quantity : 1 };
+                        }
                     }
                     return { ...item, quantity: Math.max(1, newQuantity) };
                 }
@@ -202,6 +224,62 @@ export default function SalesPage() {
     }, [currentTab?.items]);
 
 
+    const handleSearchCustomer = useCallback(async () => {
+        if (!currentTab?.customerSearchPhone.trim()) {
+            toast.info('Vui lòng nhập một phần số điện thoại để tìm kiếm khách hàng.');
+            updateCurrentTab(prev => ({ ...prev, customerMatchingResults: [] }));
+            return;
+        }
+
+        const searchTerm = currentTab.customerSearchPhone.trim();
+        const { data, error } = await supabaseClient
+            .from('customers')
+            .select('full_name, email, phone, address')
+            .ilike('phone', `%${searchTerm}%`);
+
+        if (error) {
+            toast.error(`Lỗi tìm kiếm khách hàng: ${error.message}`);
+            updateCurrentTab(prev => ({ ...prev, customerMatchingResults: [] }));
+            return;
+        }
+
+        if (data && data.length > 0) {
+            updateCurrentTab(prev => ({ ...prev, customerMatchingResults: data }));
+            toast.success(`Tìm thấy ${data.length} khách hàng phù hợp.`);
+        } else {
+            updateCurrentTab(prev => ({ ...prev, customerMatchingResults: [] }));
+            toast.info('Không tìm thấy khách hàng nào với số điện thoại này.');
+        }
+    }, [currentTab?.customerSearchPhone, supabaseClient, updateCurrentTab]);
+
+    const handleSelectCustomer = useCallback((customer: CustomerInfo) => {
+        updateCurrentTab(prev => ({
+            ...prev,
+            customerName: customer.full_name || '',
+            customerEmail: customer.email || '',
+            customerPhone: customer.phone || '',
+            customerAddress: customer.address || '',
+            customerSearchPhone: '',
+            customerMatchingResults: [],
+        }));
+        toast.success(`Đã chọn khách hàng: ${customer.full_name || customer.phone}`);
+    }, [updateCurrentTab]);
+
+    // HÀM MỚI: TỰ ĐỘNG ĐIỀN THÔNG TIN KHÁCH HÀNG VÃNG LAI
+    const handleSetGuestCustomer = useCallback(() => {
+        updateCurrentTab(prev => ({
+            ...prev,
+            customerName: 'Khách mua tại cửa hàng',
+            customerEmail: 'N/A', // Hoặc để trống nếu bạn muốn
+            customerPhone: 'N/A', // Hoặc một số điện thoại placeholder unique nếu cần theo dõi
+            customerAddress: 'N/A', // Hoặc để trống nếu bạn muốn
+            customerSearchPhone: '', // Xóa ô tìm kiếm
+            customerMatchingResults: [], // Xóa danh sách kết quả tìm kiếm
+        }));
+        toast.info('Đã điền thông tin khách hàng vãng lai.');
+    }, [updateCurrentTab]);
+
+
     // Fetch user role
     const { data: profileData, isLoading: isLoadingProfile } = useQuery({
         queryKey: ['userProfile', user?.id],
@@ -209,7 +287,7 @@ export default function SalesPage() {
             if (!user?.id) return null;
             const { data, error } = await supabaseClient
                 .from('profiles')
-                .select('role, full_name, email, phone, address') // Thêm các trường cần thiết cho profile
+                .select('role, full_name, email, phone, address')
                 .eq('id', user.id)
                 .single();
             if (error) throw error;
@@ -225,16 +303,14 @@ export default function SalesPage() {
         }
     }, [profileData]);
 
-    // Initialize first tab when component mounts and user role is determined
     useEffect(() => {
         if ((userRole === 'admin' || userRole === 'staff') && orderTabs.length === 0) {
             handleAddTab();
         }
-    }, [userRole, orderTabs.length, handleAddTab]); // Thêm handleAddTab vào dependency
+    }, [userRole, orderTabs.length, handleAddTab]);
 
-    // Mutation to create a new order and update stock using Edge Function
     const createOrderMutation = useMutation({
-        mutationFn: async (payloadData: { // Đổi tên thành payloadData để tránh nhầm lẫn
+        mutationFn: async (payloadData: {
             profile: {
                 full_name: string;
                 email: string | null;
@@ -251,85 +327,79 @@ export default function SalesPage() {
             paymentMethod: string;
             totalAmount: number;
             userId: string;
+            orderSource: string;
         }) => {
-            // Call the Edge Function "place-order"
             const { data, error } = await supabaseClient.functions.invoke('place-order', {
-                body: JSON.stringify(payloadData), // Gửi payloadData đã định dạng
-                // You might need to set headers like 'Content-Type': 'application/json'
-                // if your Edge Function expects it explicitly. Supabase usually handles this.
+                body: JSON.stringify(payloadData),
             });
 
             if (error) {
-                // Supabase functions.invoke typically returns error as part of the data object
-                // or throws it if the network call itself fails.
-                // We'll check for a custom error structure from the Edge Function first
                 if (data && data.error) {
-                    throw new Error(data.error); // Error from the Edge Function's response body
+                    throw new Error(data.error);
                 }
-                throw new Error(error.message || 'Lỗi không xác định khi gọi Edge Function'); // Network or other invoke error
+                throw new Error(error.message || 'Lỗi không xác định khi gọi Edge Function');
             }
 
-            // Check for application-level errors returned by the Edge Function inside 'data'
             if (data && data.error) {
                 throw new Error(data.error);
             }
             
-            return data; // The data returned by your Edge Function
+            return data;
         },
         onSuccess: (data) => {
-            toast.success(`Đơn hàng ${data.orderId?.substring(0, 8) || 'mới'}... đã được tạo thành công!`); // Assuming your Edge Function returns an orderId
-            // Remove the completed tab
+            toast.success(`Đơn hàng ${data.orderId?.substring(0, 8) || 'mới'}... đã được tạo thành công!`);
             setOrderTabs(prevTabs => prevTabs.filter(tab => tab.tabId !== currentTabId));
-            // If no tabs left, add a new empty one, otherwise switch to the next available tab
-            if (orderTabs.length === 1) { // If this was the last tab (before filtering)
+            if (orderTabs.length === 1) {
                 handleAddTab();
             } else if (orderTabs.length > 1) {
-                // Find the next tab to activate
                 const remainingTabs = orderTabs.filter(tab => tab.tabId !== currentTabId);
                 if (remainingTabs.length > 0) {
                     setCurrentTabId(remainingTabs[0].tabId);
                 } else {
-                    // This case should ideally not happen if length > 1, but as a fallback
                     handleAddTab();
                 }
             }
-            // Invalidate products query cache to reflect new stock (if you have a product list page)
             queryClient.invalidateQueries({ queryKey: ['products'] });
         },
         onError: (error: Error) => {
-            // Hiển thị lỗi rõ ràng hơn, đặc biệt là lỗi tồn kho từ Edge Function
             toast.error(`Lỗi tạo đơn hàng mới: ${error.message}`);
         },
     });
 
     const handleCreateNewOrder = useCallback(() => {
-        if (!currentTab || !user || !profileData) return; // Đảm bảo user và profileData đã có
+        if (!currentTab || !user || !profileData) return;
 
-        if (!currentTab.customerName.trim() || !currentTab.customerPhone.trim() || currentTab.items.length === 0) {
-            toast.error('Vui lòng nhập tên khách hàng, số điện thoại và thêm ít nhất một sản phẩm.');
+        // Cập nhật điều kiện kiểm tra:
+        // Cho phép tạo đơn nếu tên khách hàng là "Khách mua tại cửa hàng"
+        // HOẶC (tên khách hàng không rỗng VÀ số điện thoại không rỗng)
+        const isGuestCustomer = currentTab.customerName.trim() === 'Khách mua tại cửa hàng';
+        const isCustomerInfoValid = isGuestCustomer || (currentTab.customerName.trim() && currentTab.customerPhone.trim());
+
+        if (!isCustomerInfoValid || currentTab.items.length === 0) {
+            toast.error('Vui lòng nhập tên khách hàng, số điện thoại (hoặc chọn "Khách mua tại cửa hàng") và thêm ít nhất một sản phẩm.');
             return;
         }
 
         const totalAmount = calculateNewOrderTotal();
 
-        // Chuẩn bị payload theo cấu trúc mà Edge Function mong đợi
         const payloadForEdgeFunction = {
             profile: {
                 full_name: currentTab.customerName.trim(),
-                email: currentTab.customerEmail.trim() || null,
-                phone: currentTab.customerPhone.trim(),
-                address: currentTab.customerAddress.trim() || null,
+                email: currentTab.customerEmail.trim() === 'N/A' ? null : currentTab.customerEmail.trim() || null,
+                phone: currentTab.customerPhone.trim() === 'N/A' ? '0000000000' : currentTab.customerPhone.trim(), // Đảm bảo số điện thoại không phải 'N/A' khi gửi DB
+                address: currentTab.customerAddress.trim() === 'N/A' ? null : currentTab.customerAddress.trim() || null,
             },
             checkoutItems: currentTab.items.map(item => ({
                 product_id: item.product_id!,
                 product_name: item.product_name,
                 product_price: item.product_price,
                 quantity: item.quantity,
-                product_image: item.product_image, // Add this if your RPC expects it for logging
+                product_image: item.product_image,
             })),
             paymentMethod: currentTab.paymentMethod,
             totalAmount: totalAmount,
-            userId: user.id, // Sử dụng user.id từ useUser()
+            userId: user.id,
+            orderSource: 'pos',
         };
 
         createOrderMutation.mutate(payloadForEdgeFunction);
@@ -393,6 +463,58 @@ export default function SalesPage() {
                         {/* Customer Information & Payment */}
                         <div className="flex flex-col">
                             <h3 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-2">Thông tin Khách hàng & Thanh toán</h3>
+                            {/* KHU VỰC TÌM KIẾM KHÁCH HÀNG */}
+                            <div className="mb-4">
+                                <label htmlFor="customerSearchPhone" className="block text-gray-700 text-sm font-bold mb-2">Tìm khách hàng bằng SĐT:</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        id="customerSearchPhone"
+                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                                        value={currentTab.customerSearchPhone}
+                                        onChange={(e) => updateCurrentTab(prev => ({ ...prev, customerSearchPhone: e.target.value }))}
+                                        onKeyPress={(e) => { if (e.key === 'Enter') handleSearchCustomer(); }}
+                                        placeholder="Nhập số điện thoại khách hàng"
+                                    />
+                                    <button
+                                        onClick={handleSearchCustomer}
+                                        className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                    >
+                                        Tìm
+                                    </button>
+                                </div>
+                                {/* HIỂN THỊ KẾT QUẢ TÌM KIẾM KHÁCH HÀNG */}
+                                {currentTab.customerMatchingResults.length > 0 && (
+                                    <div className="border border-gray-200 rounded-md max-h-40 overflow-y-auto mt-2">
+                                        {currentTab.customerMatchingResults.map((customer, index) => (
+                                            <div
+                                                key={index}
+                                                className="flex justify-between items-center p-2 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                                                onClick={() => handleSelectCustomer(customer)}
+                                            >
+                                                <span>{customer.full_name || 'Khách hàng ẩn danh'} - {customer.phone}</span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleSelectCustomer(customer); }}
+                                                    className="bg-green-500 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded"
+                                                >
+                                                    Chọn
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            {/* NÚT MỚI: ĐIỀN THÔNG TIN KHÁCH HÀNG VÃNG LAI */}
+                            <div className="mb-4 text-right">
+                                <button
+                                    onClick={handleSetGuestCustomer}
+                                    className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                                >
+                                    Khách mua tại cửa hàng
+                                </button>
+                            </div>
+                            {/* KẾT THÚC KHU VỰC MỚI */}
+
                             <div className="mb-4">
                                 <label htmlFor="customerName" className="block text-gray-700 text-sm font-bold mb-2">Tên Khách hàng:</label>
                                 <input
@@ -478,7 +600,7 @@ export default function SalesPage() {
                                 <div className="border border-gray-200 rounded-md max-h-48 overflow-y-auto mb-4">
                                     {currentTab.searchResults.map(product => (
                                         <div key={product.id} className="flex justify-between items-center p-2 border-b last:border-b-0 hover:bg-gray-50">
-                                            <span>{product.name} - {product.price.toLocaleString('vi-VN')} VND (Tồn: {product.stock_quantity})</span> {/* **Đã sửa: stock_quantity** */}
+                                            <span>{product.name} - {product.price.toLocaleString('vi-VN')} VND (Tồn: {product.stock_quantity})</span>
                                             <button
                                                 onClick={() => handleAddProductToNewOrder(product)}
                                                 className="bg-indigo-500 hover:bg-indigo-700 text-white text-xs font-bold py-1 px-2 rounded"
@@ -531,7 +653,11 @@ export default function SalesPage() {
                                 <button
                                     onClick={handleCreateNewOrder}
                                     className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg focus:outline-none focus:shadow-outline"
-                                    disabled={createOrderMutation.isPending || currentTab.items.length === 0 || !currentTab.customerName.trim() || !currentTab.customerPhone.trim()}
+                                    // Điều kiện disabled đã được cập nhật
+                                    disabled={createOrderMutation.isPending || currentTab.items.length === 0 ||
+                                              (currentTab.customerName.trim() !== 'Khách mua tại cửa hàng' &&
+                                               (!currentTab.customerName.trim() || !currentTab.customerPhone.trim()))
+                                            }
                                 >
                                     {createOrderMutation.isPending ? 'Đang thanh toán...' : 'Thanh toán (Hoàn thành)'}
                                 </button>
